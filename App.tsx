@@ -1,0 +1,416 @@
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Message, MessageRole, Attachment, UserLocation, WeatherInfo, ViewMode, UserRole, UserProfile } from './types';
+import { sendMessageToGemini, generateSpeechFromText } from './services/geminiService';
+import { fetchLocalWeather } from './services/weatherService';
+import { playRawAudio } from './utils/audioUtils';
+import { dbService } from './services/dbService';
+import { supabase } from './services/supabaseClient';
+
+// Components
+import Sidebar from './components/Sidebar';
+import ChatMessage from './components/ChatMessage';
+import InputArea from './components/InputArea';
+import CropPlanner from './components/CropPlanner';
+import CameraGrid from './components/CameraGrid';
+import AutomationControl from './components/AutomationControl';
+import FarmDashboard from './components/FarmDashboard';
+import LoginScreen from './components/LoginScreen';
+import RegistrationScreen from './components/RegistrationScreen';
+import EmaterChannel from './components/EmaterChannel';
+import SystemPresentation from './components/SystemPresentation';
+import Settings from './components/Settings';
+import PlantRegistry from './components/PlantRegistry';
+import MarketView from './components/MarketView';
+import LogisticsView from './components/LogisticsView';
+import RetailPOSView from './components/RetailPOSView';
+import RetailerInsights from './components/RetailerInsights';
+import ConsumerHub from './components/ConsumerHub';
+import ProfessionalHub from './components/ProfessionalHub';
+
+import { 
+  Menu, 
+  Square, 
+  Bot, 
+  Camera, 
+  Flower2, 
+  HeartPulse, 
+  Store
+} from 'lucide-react';
+
+const INITIAL_MESSAGE: Message = {
+  id: 'init-1',
+  role: MessageRole.ASSISTANT,
+  content: `Olá! Sou o IAC Farm, seu Gestor Autônomo de Ecossistema. 
+
+Como posso te ajudar hoje?
+• Se você é **Produtor**: Posso planejar sua safra ou identificar pragas.
+• Se você é **Varejista**: Posso te dar insights de mercado e gerenciar seu PDV.
+• Se você é **Consumidor**: Posso criar um plano nutricional com o que tem de melhor no campo agora.
+
+Envie uma foto, um áudio ou escolha uma das opções abaixo!`,
+  timestamp: new Date()
+};
+
+const App: React.FC = () => {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [userRole, setUserRole] = useState<UserRole>(UserRole.CONSUMER);
+  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [view, setView] = useState<ViewMode | 'registry'>('chat');
+
+  useEffect(() => {
+    const testConnection = async () => {
+      try {
+        const { error } = await supabase.from('plants').select('id').limit(1);
+        if (error) {
+          console.error("Erro na conexão com Supabase:", error.message);
+          if (error.message.includes('Failed to fetch')) {
+            console.error("DICA: Verifique se a URL do Supabase está correta e se o projeto está ativo.");
+          }
+          if (error.message.includes('JWT')) {
+            console.error("DICA: A chave ANON do Supabase parece inválida.");
+          }
+        } else {
+          console.log("Conexão com Supabase estabelecida com sucesso.");
+        }
+      } catch (e) {
+        console.error("Falha fatal ao conectar ao Supabase:", e);
+        console.error("Certifique-se de configurar VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas configurações do projeto.");
+      }
+    };
+    testConnection();
+  }, []);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [weatherInfo, setWeatherInfo] = useState<WeatherInfo | null>(null);
+  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
+  const [isLoading, setIsLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [audioStopper, setAudioStopper] = useState<(() => void) | null>(null);
+  const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
+
+  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => { if (view === 'chat') scrollToBottom(); }, [messages, view]);
+
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const loc = { lat: position.coords.latitude, lng: position.coords.longitude };
+          setUserLocation(loc);
+          const weather = await fetchLocalWeather(loc);
+          setWeatherInfo(weather);
+        },
+        async (error) => {
+          console.warn("Geolocation denied or failed, using fallback (Rio de Janeiro):", error);
+          const fallbackLoc = { lat: -22.9068, lng: -43.1729 };
+          setUserLocation(fallbackLoc);
+          const weather = await fetchLocalWeather(fallbackLoc);
+          setWeatherInfo(weather);
+        },
+        { timeout: 10000 }
+      );
+    } else {
+      // No geolocation support
+      const fallbackLoc = { lat: -22.9068, lng: -43.1729 };
+      setUserLocation(fallbackLoc);
+      fetchLocalWeather(fallbackLoc).then(setWeatherInfo);
+    }
+  }, []);
+
+  const stopAudio = () => { if (audioStopper) { audioStopper(); setAudioStopper(null); setPlayingMessageId(null); } };
+
+  const handleToggleAudio = async (messageId: string) => {
+    if (playingMessageId === messageId) { stopAudio(); return; }
+    
+    // Check if any message is currently loading audio to prevent concurrent requests
+    const isAnyAudioLoading = messages.some(m => m.isAudioLoading);
+    if (isAnyAudioLoading) return;
+
+    stopAudio();
+    const msg = messages.find(m => m.id === messageId);
+    if (!msg) return;
+    if (msg.audioBase64) {
+      setPlayingMessageId(messageId);
+      const stopFn = await playRawAudio(msg.audioBase64, () => { setAudioStopper(null); setPlayingMessageId(null); });
+      setAudioStopper(() => stopFn);
+      return;
+    }
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isAudioLoading: true } : m));
+    try {
+      const audioBase64 = await generateSpeechFromText(msg.content);
+      setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isAudioLoading: false, audioBase64: audioBase64 || undefined } : m));
+      if (audioBase64) {
+        setPlayingMessageId(messageId);
+        const stopFn = await playRawAudio(audioBase64, () => { setAudioStopper(null); setPlayingMessageId(null); });
+        setAudioStopper(() => stopFn);
+      }
+    } catch (e) { setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isAudioLoading: false } : m)); }
+  };
+
+  const handleSendMessage = async (text: string, attachment?: Attachment) => {
+    stopAudio();
+    const newMessage: Message = { id: Date.now().toString(), role: MessageRole.USER, content: text, attachment, timestamp: new Date() };
+    setMessages(prev => [...prev, newMessage]);
+    setIsLoading(true);
+    const thinkingId = 'thinking-' + Date.now();
+    setMessages(prev => [...prev, { id: thinkingId, role: MessageRole.ASSISTANT, content: '', timestamp: new Date(), isThinking: true }]);
+
+    try {
+      const responseText = await sendMessageToGemini(messages, text, attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined, userLocation);
+      
+      setMessages(prev => {
+        const filtered = prev.filter(msg => msg.id !== thinkingId);
+        return [...filtered, { id: Date.now().toString(), role: MessageRole.ASSISTANT, content: responseText, timestamp: new Date() }];
+      });
+
+      // Lógica de Salvamento Automático no Supabase para Diagnósticos com Imagem
+      if (attachment && attachment.type === 'image') {
+        const publicUrl = await dbService.uploadImage(attachment.base64, "plant_chat");
+        if (publicUrl) {
+          // Extrai diagnóstico básico da resposta do Gemini para salvar
+          // Em um app real, poderíamos pedir ao Gemini uma resposta estruturada JSON paralela
+          await dbService.savePlantDiagnosis({
+            commonName: "Planta Identificada",
+            scientificName: "Análise via Chat",
+            date: new Date().toISOString(),
+            imageUrl: publicUrl,
+            healthStatus: responseText.toLowerCase().includes('doença') ? 'diseased' : 'healthy',
+            diagnosisSummary: "Análise Automática Chat",
+            fullDiagnosis: responseText,
+            confidence: 85,
+            location: userLocation ? `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}` : 'Não informada'
+          }, currentUser?.id || 'anonymous');
+        }
+      }
+    } catch (error) {
+       setMessages(prev => prev.filter(msg => msg.id !== thinkingId));
+       setMessages(prev => [...prev, { id: Date.now().toString(), role: MessageRole.ASSISTANT, content: "Opa, deu um problema na conexão.", timestamp: new Date() }]);
+    } finally { setIsLoading(false); }
+  };
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        setIsAuthenticated(true);
+        setCurrentUser({
+          id: session.user.id,
+          email: session.user.email || '',
+          role: UserRole.CONSUMER, // Default
+          fullName: session.user.user_metadata?.full_name || 'Usuário',
+          document: '',
+          createdAt: new Date().toISOString()
+        });
+      }
+    };
+    checkSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleLogin = (role: UserRole) => {
+    setUserRole(role);
+    setIsAuthenticated(true);
+    // Set initial view based on role
+    if (role === UserRole.PRODUCER) setView('dashboard');
+    else if (role === UserRole.RETAILER) setView('market');
+    else if (role === UserRole.CONSUMER) setView('consumer_hub');
+    else if (role === UserRole.PROFESSIONAL) setView('professional_hub');
+
+    // Mock user for dev
+    setCurrentUser({
+      id: 'dev-user',
+      email: 'dev@agrobrasil.com',
+      role: role,
+      fullName: 'Produtor Rural',
+      document: '123.456.789-00',
+      createdAt: new Date().toISOString()
+    });
+  };
+
+  const getHeaderTitle = () => {
+    switch (view) {
+      case 'chat': return 'IAC Farm - Assistente';
+      case 'planner': return 'Planejamento';
+      case 'cameras': return 'Segurança';
+      case 'automations': return 'Acionamentos';
+      case 'dashboard': return 'Minha Fazenda';
+      case 'emater': return 'Canal EMATER';
+      case 'presentation': return 'Relatório Executivo';
+      case 'market': return 'Mercado & Cotações';
+      case 'logistics': return 'Logística & Frete';
+      case 'pos': return 'PDV Varejo';
+      case 'retail_insights': return 'Insights Varejo';
+      case 'consumer_hub': return 'Saúde & Nutrição';
+      case 'professional_hub': return 'Hub do Profissional';
+      case 'settings': return 'Configurações';
+      case 'registry': return 'Minhas Plantas';
+      default: return 'IAC Farm';
+    }
+  };
+
+  if (!isAuthenticated) {
+    if (isRegistering) {
+      return (
+        <RegistrationScreen 
+          onBack={() => setIsRegistering(false)}
+          onRegister={async (role, data) => {
+            const profile: UserProfile = {
+              id: Date.now().toString(), // In real app, this would be from Auth
+              email: data.email,
+              role: role,
+              fullName: data.fullName,
+              document: data.document,
+              phone: data.phone,
+              createdAt: new Date().toISOString(),
+              producerData: role === UserRole.PRODUCER ? {
+                farmName: data.farmName,
+                totalArea: Number(data.totalArea),
+                mainCrops: data.mainCrops?.split(',') || [],
+                location: data.location
+              } : undefined,
+              retailerData: role === UserRole.RETAILER ? {
+                storeName: data.storeName,
+                cnpj: data.document,
+                address: data.address
+              } : undefined,
+              professionalData: role === UserRole.PROFESSIONAL ? {
+                specialty: data.specialty,
+                registryNumber: data.registryNumber
+              } : undefined
+            };
+
+            const success = await dbService.saveUserProfile(profile);
+            if (success) {
+              setCurrentUser(profile);
+              setUserRole(role);
+              setIsAuthenticated(true);
+              setIsRegistering(false);
+            } else {
+              alert("Erro ao salvar perfil. Tente novamente.");
+            }
+          }}
+        />
+      );
+    }
+    return (
+      <LoginScreen 
+        onLogin={handleLogin} 
+        onGoToRegister={() => setIsRegistering(true)}
+      />
+    );
+  }
+
+  return (
+    <div className={`flex h-screen w-full relative overflow-hidden font-sans animate-fade-in ${isDarkMode ? 'bg-stone-950 text-stone-100' : 'bg-white text-stone-900'}`}>
+      <Sidebar 
+        view={view as ViewMode} 
+        setView={(v) => setView(v as ViewMode | 'registry')} 
+        isSidebarOpen={isSidebarOpen} 
+        setIsSidebarOpen={setIsSidebarOpen}
+        isSidebarCollapsed={isSidebarCollapsed}
+        setIsSidebarCollapsed={setIsSidebarCollapsed}
+        userLocation={userLocation}
+        weatherInfo={weatherInfo}
+        userRole={userRole}
+      />
+
+      {isSidebarOpen && <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
+
+      <main className="flex-1 flex flex-col h-full relative z-10 w-full bg-transparent transition-all duration-300">
+        <div className="md:hidden flex items-center justify-between p-4 bg-white/80 backdrop-blur-md border-b border-stone-200 sticky top-0 z-20">
+          <button onClick={() => setIsSidebarOpen(true)} className="text-farm-800 p-2 hover:bg-stone-100 rounded-lg"><Menu size={24} /></button>
+          <span className="text-farm-900 font-bold text-lg tracking-tight">{getHeaderTitle()}</span>
+          <div className="w-6" />
+        </div>
+
+        {view === 'chat' && (
+          <>
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth bg-white">
+              <div className="max-w-4xl mx-auto min-h-full flex flex-col pb-4">
+                <div className="bg-gradient-to-r from-farm-600 to-farm-500 rounded-3xl p-6 md:p-8 text-white mb-6 flex justify-between items-center shadow-lg shadow-farm-600/20">
+                   <div>
+                      <h1 className="text-2xl md:text-3xl font-black mb-1 tracking-tight">IAC Farm</h1>
+                      <p className="text-farm-100 text-sm font-medium opacity-90">Sua lavoura na palma da mão</p>
+                   </div>
+                   <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"><Bot size={32} className="text-white" /></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                   <button onClick={() => setView('planner')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-emerald-100 transition-all group cursor-pointer">
+                      <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Flower2 size={26} /></div>
+                      <h3 className="font-bold text-stone-800 text-lg">Planejar Safra</h3>
+                      <p className="text-xs text-stone-500 font-medium">IA para produtores</p>
+                   </button>
+                   <button onClick={() => setView('market')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-orange-100 transition-all group cursor-pointer">
+                      <div className="w-14 h-14 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Store size={26} /></div>
+                      <h3 className="font-bold text-stone-800 text-lg">Mercado CEASA</h3>
+                      <p className="text-xs text-stone-500 font-medium">Previsões para varejo</p>
+                   </button>
+                   <button onClick={() => setView('consumer_hub')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-rose-100 transition-all group cursor-pointer">
+                      <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><HeartPulse size={26} /></div>
+                      <h3 className="font-bold text-stone-800 text-lg">Saúde & Nutrição</h3>
+                      <p className="text-xs text-stone-500 font-medium">IA para o consumidor</p>
+                   </button>
+                </div>
+                {messages.map((msg) => (
+                  <ChatMessage key={msg.id} message={msg} isPlaying={playingMessageId === msg.id} onToggleAudio={handleToggleAudio} />
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+            </div>
+            {audioStopper && (
+              <div className="absolute bottom-28 right-6 z-30 animate-fade-in">
+                 <button onClick={stopAudio} className="flex items-center gap-2 bg-farm-600 text-white pl-3 pr-4 py-3 rounded-full shadow-xl hover:bg-red-600 transition-colors border border-white/20">
+                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span></span>
+                    <span className="text-sm font-bold">Ouvindo...</span>
+                    <div className="h-4 w-[1px] bg-white/20 mx-1"></div>
+                    <Square size={14} fill="currentColor" />
+                 </button>
+              </div>
+            )}
+            <InputArea onSendMessage={handleSendMessage} isLoading={isLoading} />
+          </>
+        )}
+
+        {view === 'planner' && <CropPlanner userLocation={userLocation} setView={setView} />}
+        {view === 'cameras' && <CameraGrid />}
+        {view === 'automations' && <AutomationControl />}
+        {view === 'dashboard' && <FarmDashboard />}
+        {view === 'emater' && <EmaterChannel />}
+        {view === 'presentation' && <SystemPresentation />}
+        {view === 'market' && <MarketView currentUser={currentUser} setView={setView} />}
+        {view === 'logistics' && <LogisticsView />}
+        {view === 'pos' && <RetailPOSView />}
+        {view === 'retail_insights' && <RetailerInsights setView={setView} />}
+        {view === 'consumer_hub' && <ConsumerHub setView={setView} />}
+        {view === 'professional_hub' && <ProfessionalHub setView={setView} />}
+        {view === 'settings' && <Settings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
+        {view === 'registry' && <PlantRegistry currentUser={currentUser} />}
+
+      </main>
+    </div>
+  );
+};
+
+export default App;

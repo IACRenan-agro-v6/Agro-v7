@@ -1,0 +1,9 @@
+{
+  "name": "IAC Farm - Ecossistema Agro Autônomo",
+  "description": "Ecossistema agrícola completo e autônomo: conecta produtores orgânicos ao varejo, elimina atravessadores com logística inteligente, oferece PDV para hortifrutis e assistência por voz/IA.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
