@@ -129,6 +129,28 @@ export const dbService = {
     }
   },
 
+  /**
+   * Busca todos os planos de safra salvos.
+   */
+  async getCropPlans(): Promise<CropPlan[]> {
+    try {
+      const { data, error } = await supabase
+        .from('crop_plans')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      return data.map((r: any) => ({
+        ...r.data,
+        id: r.id // Optionally include DB ID if needed
+      }));
+    } catch (error) {
+      console.error("Erro ao buscar planos de safra:", error);
+      return [];
+    }
+  },
+
   // --- PROFESSIONAL HUB METHODS ---
 
   async getProfessionalClients(professionalId: string): Promise<ProfessionalClient[]> {

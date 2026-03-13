@@ -69,7 +69,14 @@ const CropPlanner: React.FC<CropPlannerProps> = ({ userLocation, setView }) => {
   const handleSave = async () => {
     if (!plan) return;
     setIsSaving(true);
-    const success = await dbService.saveCropPlan(plan);
+    
+    // Include planting date in the plan object before saving
+    const planToSave = {
+      ...plan,
+      plantingDate: plantingDate || undefined
+    };
+    
+    const success = await dbService.saveCropPlan(planToSave);
     setIsSaving(false);
     if (success) {
       setSaveSuccess(true);

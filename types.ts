@@ -117,6 +117,7 @@ export interface CropPlan {
     prevention: string; // Brief tip
   }[];
   harvestIndicators: string;
+  plantingDate?: string; // ISO date string
 }
 
 // Interface for the Plant History/Registry

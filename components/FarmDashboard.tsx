@@ -1,9 +1,11 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Sector, LineChart, Line, AreaChart, Area, LabelList
 } from 'recharts';
-import { DollarSign, TrendingUp, Package, Store, ArrowUpRight, ArrowDownRight, Activity, Calendar, AlertTriangle, Layers, Wallet, CloudRain, Thermometer, CloudFog, History, Sprout, Zap, Battery, BatteryCharging, Sun, Plug, Leaf, X, ChevronRight, FileText } from 'lucide-react';
+import { DollarSign, TrendingUp, Package, Store, ArrowUpRight, ArrowDownRight, Activity, Calendar, AlertTriangle, Layers, Wallet, CloudRain, Thermometer, CloudFog, History, Sprout, Zap, Battery, BatteryCharging, Sun, Plug, Leaf, X, ChevronRight, FileText, Clock, ArrowRight } from 'lucide-react';
+import { dbService } from '../services/dbService';
+import { CropPlan } from '../types';
 
 // Data Imports
 import { 
@@ -82,8 +84,21 @@ const FarmDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'finance' | 'history' | 'energy'>('finance');
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
+  const [cropPlans, setCropPlans] = useState<CropPlan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(false);
   
   const batteryLevel = 78; // %
+
+  useEffect(() => {
+    const fetchPlans = async () => {
+      setLoadingPlans(true);
+      const plans = await dbService.getCropPlans();
+      setCropPlans(plans.filter(p => p.plantingDate)); // Only show those with planting date
+      setLoadingPlans(false);
+    };
+    fetchPlans();
+  }, []);
+
   const isCharging = true;
 
   const totalRevenue = useMemo(() => REVENUE_BY_STORE.reduce((acc, curr) => acc + curr.value, 0), []);
@@ -357,6 +372,70 @@ const FarmDashboard: React.FC = () => {
                         </BarChart>
                     </ResponsiveContainer>
                   </div>
+              </div>
+
+              {/* Harvest Estimates Widget */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+                          <Clock className="text-farm-600" size={20} />
+                          Estimativa de Colheita (Planos Ativos)
+                      </h3>
+                      <span className="text-xs font-bold text-stone-400 uppercase tracking-widest">Baseado na Data de Plantio</span>
+                  </div>
+
+                  {loadingPlans ? (
+                      <div className="flex items-center justify-center py-12">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-farm-600"></div>
+                      </div>
+                  ) : cropPlans.length > 0 ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {cropPlans.map((plan, idx) => {
+                              const start = new Date(plan.plantingDate!);
+                              const end = new Date(plan.plantingDate!);
+                              start.setDate(start.getDate() + plan.cycleDaysMin);
+                              end.setDate(end.getDate() + plan.cycleDaysMax);
+                              
+                              const harvestStart = start.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                              const harvestEnd = end.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+                              const plantingDateStr = new Date(plan.plantingDate!).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+
+                              return (
+                                  <div key={idx} className="bg-stone-50 border border-stone-100 p-4 rounded-2xl hover:border-farm-300 transition-all group">
+                                      <div className="flex justify-between items-start mb-3">
+                                          <div>
+                                              <h4 className="font-bold text-stone-800">{plan.cropName}</h4>
+                                              <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider">Plantado em {plantingDateStr}</p>
+                                          </div>
+                                          <div className="p-2 bg-white rounded-lg text-farm-600 shadow-sm group-hover:bg-farm-600 group-hover:text-white transition-colors">
+                                              <Sprout size={16} />
+                                          </div>
+                                      </div>
+                                      <div className="flex items-center gap-3 bg-white p-3 rounded-xl border border-stone-100 shadow-sm">
+                                          <div className="flex-1">
+                                              <div className="text-[10px] text-stone-400 font-bold uppercase mb-0.5">Janela de Colheita</div>
+                                              <div className="flex items-center gap-2 text-sm font-bold text-farm-700">
+                                                  <span>{harvestStart}</span>
+                                                  <ArrowRight size={12} className="text-stone-300" />
+                                                  <span>{harvestEnd}</span>
+                                              </div>
+                                          </div>
+                                          <div className="text-right">
+                                              <div className="text-[10px] text-stone-400 font-bold uppercase mb-0.5">Ciclo</div>
+                                              <div className="text-xs font-bold text-stone-600">{plan.cycleDuration}</div>
+                                          </div>
+                                      </div>
+                                  </div>
+                              );
+                          })}
+                      </div>
+                  ) : (
+                      <div className="flex flex-col items-center justify-center py-12 text-stone-400 bg-stone-50 rounded-2xl border border-dashed border-stone-200">
+                          <Calendar size={48} className="mb-4 opacity-20" />
+                          <p className="font-medium text-sm">Nenhum plano de safra com data de plantio encontrado.</p>
+                          <p className="text-xs mt-1">Cadastre um plano no menu "Planejamento" para ver as estimativas aqui.</p>
+                      </div>
+                  )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
