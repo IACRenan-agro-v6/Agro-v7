@@ -209,12 +209,12 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       </div>
       
       {/* Quick shortcuts below input (Optional for power users, but kept subtle) */}
-      <div className="max-w-4xl mx-auto flex justify-center gap-4 mt-3">
-         <button onClick={() => cameraInputRef.current?.click()} className="text-[10px] uppercase font-bold text-stone-400 hover:text-farm-600 flex items-center gap-1">
-            <Camera size={12} /> Câmera
+      <div className="max-w-4xl mx-auto flex justify-center gap-6 mt-3">
+         <button onClick={() => cameraInputRef.current?.click()} className="text-sm font-bold text-stone-400 hover:text-farm-600 flex items-center gap-1 transition-colors">
+            <Camera size={16} /> Câmera
          </button>
-         <button onClick={() => plantIdInputRef.current?.click()} className="text-[10px] uppercase font-bold text-stone-400 hover:text-farm-600 flex items-center gap-1">
-            <ScanEye size={12} /> Identificar
+         <button onClick={() => plantIdInputRef.current?.click()} className="text-sm font-bold text-stone-400 hover:text-farm-600 flex items-center gap-1 transition-colors">
+            <ScanEye size={16} /> Identificar Planta
          </button>
       </div>
 
