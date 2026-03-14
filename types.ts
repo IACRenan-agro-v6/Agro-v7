@@ -244,3 +244,27 @@ export interface TechSpec {
   iconType: 'globe' | 'mobile' | 'shield';
   color: 'farm' | 'blue' | 'green';
 }
+
+// AI Task Processing
+export enum AITaskIntent {
+  ADD_PRODUCT = 'ADD_PRODUCT',
+  CHECK_ORDER = 'CHECK_ORDER',
+  FIELD_NOTE = 'FIELD_NOTE',
+  GENERAL_CHAT = 'GENERAL_CHAT',
+  PLANT_ID = 'PLANT_ID'
+}
+
+export interface AITaskResponse {
+  intent: AITaskIntent;
+  confidence: number;
+  extractedData: any;
+  assistantMessage: string;
+}
+
+export interface OfflineTask {
+  id: string;
+  text: string;
+  attachment?: Attachment;
+  timestamp: string;
+  status: 'pending' | 'synced' | 'failed';
+}

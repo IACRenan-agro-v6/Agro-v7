@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { Send, Mic, Image as ImageIcon, Video, X, Loader2, ScanEye, Camera } from 'lucide-react';
+import { Send, Mic, Image as ImageIcon, Video, X, Loader2, ScanEye, Camera, ClipboardList } from 'lucide-react';
 import { Attachment } from '../types';
 import { fileToBase64 } from '../utils/fileUtils';
 
@@ -99,6 +99,15 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       onSendMessage("Por favor, identifique esta planta, informe se ela é tóxica e me dê detalhes sobre a espécie.", att);
     }
     if (plantIdInputRef.current) plantIdInputRef.current.value = '';
+  };
+
+  const handleFieldNote = () => {
+    if (!inputText.trim()) {
+      alert("Por favor, fale ou digite a atividade primeiro.");
+      return;
+    }
+    onSendMessage(`[FIELD_NOTE]: ${inputText}`);
+    setInputText('');
   };
 
   const toggleListening = () => {
@@ -215,6 +224,9 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
          </button>
          <button onClick={() => plantIdInputRef.current?.click()} className="text-sm font-bold text-stone-400 hover:text-farm-600 flex items-center gap-1 transition-colors">
             <ScanEye size={16} /> Identificar Planta
+         </button>
+         <button onClick={handleFieldNote} className="text-sm font-bold text-stone-400 hover:text-farm-600 flex items-center gap-1 transition-colors">
+            <ClipboardList size={16} /> Anotar Atividade
          </button>
       </div>
 

@@ -1,11 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Message, MessageRole, Attachment, UserLocation, WeatherInfo, ViewMode, UserRole, UserProfile } from './types';
-import { sendMessageToGemini, generateSpeechFromText } from './services/geminiService';
+import { Message, MessageRole, Attachment, UserLocation, WeatherInfo, ViewMode, UserRole, UserProfile, AITaskIntent, OfflineTask } from './types';
+import { sendMessageToGemini, generateSpeechFromText, parseFieldNote, processUserTask } from './services/geminiService';
 import { fetchLocalWeather } from './services/weatherService';
 import { playRawAudio } from './utils/audioUtils';
 import { dbService } from './services/dbService';
+import { cacheService } from './services/cacheService';
 import { supabase } from './services/supabaseClient';
+import { Wifi, WifiOff, RefreshCw, CloudOff } from 'lucide-react';
 
 // Components
 import Sidebar from './components/Sidebar';
@@ -59,6 +61,8 @@ const App: React.FC = () => {
   const [userRole, setUserRole] = useState<UserRole>(UserRole.CONSUMER);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [view, setView] = useState<ViewMode | 'registry'>('chat');
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     const testConnection = async () => {
@@ -88,6 +92,7 @@ const App: React.FC = () => {
   const [weatherInfo, setWeatherInfo] = useState<WeatherInfo | null>(null);
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isVoiceAssistantActive, setIsVoiceAssistantActive] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [audioStopper, setAudioStopper] = useState<(() => void) | null>(null);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
@@ -151,28 +156,125 @@ const App: React.FC = () => {
     } catch (e) { setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isAudioLoading: false } : m)); }
   };
 
-  const handleSendMessage = async (text: string, attachment?: Attachment) => {
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (isOnline) {
+      syncOfflineTasks();
+    }
+  }, [isOnline]);
+
+  const syncOfflineTasks = async () => {
+    const pendingTasks = await cacheService.getPendingTasks();
+    if (pendingTasks.length === 0) return;
+
+    setIsSyncing(true);
+    console.log(`Sincronizando ${pendingTasks.length} tarefas pendentes...`);
+
+    for (const task of pendingTasks) {
+      try {
+        // Re-process the task now that we are online
+        await handleSendMessage(task.text, task.attachment, true);
+        await cacheService.markTaskSynced(task.id);
+      } catch (error) {
+        console.error(`Erro ao sincronizar tarefa ${task.id}:`, error);
+      }
+    }
+
+    setIsSyncing(false);
+  };
+
+  const handleSendMessage = async (text: string, attachment?: Attachment, isSyncingTask = false) => {
     stopAudio();
-    const newMessage: Message = { id: Date.now().toString(), role: MessageRole.USER, content: text, attachment, timestamp: new Date() };
-    setMessages(prev => [...prev, newMessage]);
+    const cleanText = text.startsWith('[FIELD_NOTE]: ') ? text.replace('[FIELD_NOTE]: ', '') : text;
+
+    if (!isSyncingTask) {
+      const newMessage: Message = { id: Date.now().toString(), role: MessageRole.USER, content: cleanText, attachment, timestamp: new Date() };
+      setMessages(prev => [...prev, newMessage]);
+    }
+
+    if (!isOnline && !isSyncingTask) {
+      // Offline mode: save to queue
+      const offlineTask: OfflineTask = {
+        id: Date.now().toString(),
+        text: text,
+        attachment,
+        timestamp: new Date().toISOString(),
+        status: 'pending'
+      };
+      await cacheService.saveOfflineTask(offlineTask);
+      
+      setMessages(prev => [...prev, { 
+        id: 'offline-' + Date.now(), 
+        role: MessageRole.ASSISTANT, 
+        content: "📴 **Você está offline.** Sua mensagem foi salva e será processada assim que a conexão voltar. Fique tranquilo, nada se perde!", 
+        timestamp: new Date() 
+      }]);
+      return;
+    }
+
     setIsLoading(true);
     const thinkingId = 'thinking-' + Date.now();
-    setMessages(prev => [...prev, { id: thinkingId, role: MessageRole.ASSISTANT, content: '', timestamp: new Date(), isThinking: true }]);
+    if (!isSyncingTask) {
+      setMessages(prev => [...prev, { id: thinkingId, role: MessageRole.ASSISTANT, content: '', timestamp: new Date(), isThinking: true }]);
+    }
 
     try {
-      const responseText = await sendMessageToGemini(messages, text, attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined, userLocation);
+      let responseText = '';
       
+      // Use the new processUserTask for intelligent intent detection
+      const aiTask = await processUserTask(cleanText, attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined);
+      
+      if (aiTask) {
+        responseText = aiTask.assistantMessage;
+        
+        // Handle specific intents with extra UI feedback or logic
+        if (aiTask.intent === AITaskIntent.ADD_PRODUCT && aiTask.confidence > 0.7) {
+          const { productName, quantity, price } = aiTask.extractedData;
+          responseText += `\n\n📦 **Resumo do Anúncio:**\n- Produto: ${productName || 'Não identificado'}\n- Quantidade: ${quantity || 'Sob consulta'}\n- Preço: ${price || 'A combinar'}\n\n*Deseja confirmar a publicação no Mercado?*`;
+        } else if (aiTask.intent === AITaskIntent.CHECK_ORDER && aiTask.confidence > 0.7) {
+          const { orderId } = aiTask.extractedData;
+          responseText += `\n\n🔍 **Status do Pedido ${orderId || ''}:**\nO seu pedido está em rota de entrega e deve chegar em breve ao destino.`;
+        } else if (aiTask.intent === AITaskIntent.FIELD_NOTE && aiTask.confidence > 0.7) {
+          const { activity, productName, quantity, location } = aiTask.extractedData;
+          responseText = `✅ **Nota de Campo Registrada!**\n\n` +
+            `🚜 **Atividade:** ${activity || 'Geral'}\n` +
+            `🌱 **Produto:** ${productName || 'N/A'}\n` +
+            `⚖️ **Quantidade:** ${quantity || 'N/A'}\n` +
+            `📍 **Local:** ${location || 'N/A'}\n\n` +
+            `*${aiTask.assistantMessage}*`;
+        }
+      } else {
+        // Fallback to general chat if task processing fails
+        responseText = await sendMessageToGemini(messages, text, attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined, userLocation);
+      }
+      
+      const assistantMsgId = Date.now().toString();
       setMessages(prev => {
         const filtered = prev.filter(msg => msg.id !== thinkingId);
-        return [...filtered, { id: Date.now().toString(), role: MessageRole.ASSISTANT, content: responseText, timestamp: new Date() }];
+        return [...filtered, { id: assistantMsgId, role: MessageRole.ASSISTANT, content: responseText, timestamp: new Date() }];
       });
+
+      // Auto-play audio if Voice Assistant is active
+      if (isVoiceAssistantActive) {
+        setTimeout(() => handleToggleAudio(assistantMsgId), 500);
+      }
 
       // Lógica de Salvamento Automático no Supabase para Diagnósticos com Imagem
       if (attachment && attachment.type === 'image') {
         const publicUrl = await dbService.uploadImage(attachment.base64, "plant_chat");
         if (publicUrl) {
-          // Extrai diagnóstico básico da resposta do Gemini para salvar
-          // Em um app real, poderíamos pedir ao Gemini uma resposta estruturada JSON paralela
           await dbService.savePlantDiagnosis({
             commonName: "Planta Identificada",
             scientificName: "Análise via Chat",
@@ -187,8 +289,10 @@ const App: React.FC = () => {
         }
       }
     } catch (error) {
-       setMessages(prev => prev.filter(msg => msg.id !== thinkingId));
-       setMessages(prev => [...prev, { id: Date.now().toString(), role: MessageRole.ASSISTANT, content: "Opa, deu um problema na conexão.", timestamp: new Date() }]);
+       if (!isSyncingTask) {
+         setMessages(prev => prev.filter(msg => msg.id !== thinkingId));
+         setMessages(prev => [...prev, { id: Date.now().toString(), role: MessageRole.ASSISTANT, content: "Opa, deu um problema na conexão.", timestamp: new Date() }]);
+       }
     } finally { setIsLoading(false); }
   };
 
@@ -324,6 +428,22 @@ const App: React.FC = () => {
 
   return (
     <div className={`flex h-screen w-full relative overflow-hidden font-sans animate-fade-in ${isDarkMode ? 'bg-stone-950 text-stone-100' : 'bg-white text-stone-900'}`}>
+      
+      {/* Offline Banner */}
+      {!isOnline && (
+        <div className="fixed top-0 left-0 right-0 bg-red-600 text-white py-1 px-4 text-center text-xs font-bold z-[100] flex items-center justify-center gap-2 animate-slide-down">
+          <WifiOff size={14} />
+          <span>MODO OFFLINE ATIVO - Suas ações serão sincronizadas quando a conexão voltar</span>
+        </div>
+      )}
+
+      {isSyncing && (
+        <div className="fixed top-0 left-0 right-0 bg-blue-600 text-white py-1 px-4 text-center text-xs font-bold z-[100] flex items-center justify-center gap-2 animate-slide-down">
+          <RefreshCw size={14} className="animate-spin" />
+          <span>SINCRONIZANDO DADOS COM O SERVIDOR...</span>
+        </div>
+      )}
+
       <Sidebar 
         view={view as ViewMode} 
         setView={(v) => setView(v as ViewMode | 'registry')} 
@@ -356,6 +476,23 @@ const App: React.FC = () => {
                    </div>
                    <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"><Bot size={32} className="text-white" /></div>
                 </div>
+
+                <div className="mb-6 flex items-center justify-between bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${isVoiceAssistantActive ? 'bg-green-500 animate-pulse' : 'bg-stone-300'}`} />
+                    <div>
+                      <h4 className="font-bold text-stone-800 text-sm">Assistente de Voz</h4>
+                      <p className="text-xs text-stone-500">A IA falará as respostas automaticamente</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setIsVoiceAssistantActive(!isVoiceAssistantActive)}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${isVoiceAssistantActive ? 'bg-farm-600 text-white shadow-md' : 'bg-white border border-stone-200 text-stone-600'}`}
+                  >
+                    {isVoiceAssistantActive ? 'ATIVADO' : 'DESATIVADO'}
+                  </button>
+                </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
                    <button onClick={() => setView('planner')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-emerald-100 transition-all group cursor-pointer">
                       <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Flower2 size={26} /></div>

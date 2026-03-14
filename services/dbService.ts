@@ -1,5 +1,6 @@
 
 import { supabase } from './supabaseClient';
+import { cacheService } from './cacheService';
 import { 
   IdentifiedPlant, 
   CropPlan, 
@@ -90,8 +91,8 @@ export const dbService = {
         .order('date', { ascending: false });
 
       if (error) throw error;
-
-      return data.map((r: any) => ({
+      
+      const history = data.map((r: any) => ({
         id: r.id.toString(),
         commonName: r.common_name,
         scientificName: r.scientific_name,
@@ -103,9 +104,15 @@ export const dbService = {
         confidence: r.confidence,
         location: r.location
       }));
+
+      // Cache the results
+      await cacheService.cachePlantHistory(history);
+
+      return history;
     } catch (error) {
       console.error("Erro ao buscar histórico:", error);
-      return [];
+      // Try to return from cache if offline
+      return await cacheService.getCachedPlantHistory();
     }
   },
 
@@ -141,13 +148,19 @@ export const dbService = {
 
       if (error) throw error;
 
-      return data.map((r: any) => ({
+      const plans = data.map((r: any) => ({
         ...r.data,
         id: r.id // Optionally include DB ID if needed
       }));
+
+      // Cache the results
+      await cacheService.cacheCropPlans(plans);
+
+      return plans;
     } catch (error) {
       console.error("Erro ao buscar planos de safra:", error);
-      return [];
+      // Try to return from cache if offline
+      return await cacheService.getCachedCropPlans();
     }
   },
 

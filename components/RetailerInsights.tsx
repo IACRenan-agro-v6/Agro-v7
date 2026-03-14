@@ -11,7 +11,8 @@ import {
   ArrowDownRight,
   BarChart3,
   Search,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from 'lucide-react';
 import { MarketQuote, MarketOffer, UserProfile, ViewMode } from '../types';
 import { 
@@ -51,6 +52,24 @@ interface RetailerInsightsProps {
 const RetailerInsights: React.FC<RetailerInsightsProps> = ({ setView }) => {
   const [showMap, setShowMap] = React.useState(false);
   const [userLocation, setUserLocation] = React.useState<{lat: number, lng: number} | null>(null);
+  const [isPredicting, setIsPredicting] = React.useState(false);
+  const [showPrediction, setShowPrediction] = React.useState(false);
+
+  const runPrediction = () => {
+    setIsPredicting(true);
+    setTimeout(() => {
+      setIsPredicting(false);
+      setShowPrediction(true);
+    }, 2000);
+  };
+
+  const chartData = React.useMemo(() => {
+    if (!showPrediction) return FORECAST_DATA;
+    return FORECAST_DATA.map((d, i) => ({
+      ...d,
+      predicao: i > 3 ? d.demanda * (1 + Math.random() * 0.2) : undefined
+    }));
+  }, [showPrediction]);
 
   // Get user location for map
   React.useEffect(() => {
@@ -108,16 +127,18 @@ const RetailerInsights: React.FC<RetailerInsightsProps> = ({ setView }) => {
             </p>
             <div className="flex flex-wrap gap-4">
               <button 
+                onClick={runPrediction}
+                disabled={isPredicting}
+                className="px-8 py-3 bg-white text-indigo-900 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-stone-100 transition-all flex items-center gap-2"
+              >
+                {isPredicting ? <Loader2 className="animate-spin" size={16} /> : <BrainCircuit size={16} />}
+                {isPredicting ? 'Analisando...' : showPrediction ? 'Atualizar Previsão' : 'Rodar Previsão de IA'}
+              </button>
+              <button 
                 onClick={() => setView?.('market')}
                 className="px-8 py-3 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-indigo-500 transition-all"
               >
                 Ajustar Pedidos
-              </button>
-              <button 
-                onClick={() => setView?.('planner')}
-                className="px-8 py-3 bg-white/10 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-white/20 transition-all backdrop-blur-md border border-white/10"
-              >
-                Ver Relatório de Safra
               </button>
             </div>
           </div>
@@ -134,11 +155,12 @@ const RetailerInsights: React.FC<RetailerInsightsProps> = ({ setView }) => {
               <div className="flex gap-4 text-[10px] font-bold">
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-indigo-500"></div> DEMANDA</div>
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> OFERTA</div>
+                {showPrediction && <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500"></div> PREVISÃO IA</div>}
               </div>
             </div>
             <div className="h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={FORECAST_DATA}>
+                <AreaChart data={chartData}>
                   <defs>
                     <linearGradient id="colorDemanda" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#6366f1" stopOpacity={0.1}/>
@@ -147,6 +169,10 @@ const RetailerInsights: React.FC<RetailerInsightsProps> = ({ setView }) => {
                     <linearGradient id="colorOferta" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.1}/>
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                    </linearGradient>
+                    <linearGradient id="colorPredicao" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.1}/>
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
@@ -157,6 +183,7 @@ const RetailerInsights: React.FC<RetailerInsightsProps> = ({ setView }) => {
                   />
                   <Area type="monotone" dataKey="demanda" stroke="#6366f1" strokeWidth={3} fillOpacity={1} fill="url(#colorDemanda)" />
                   <Area type="monotone" dataKey="oferta" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorOferta)" />
+                  {showPrediction && <Area type="monotone" dataKey="predicao" stroke="#f43f5e" strokeWidth={3} strokeDasharray="5 5" fillOpacity={1} fill="url(#colorPredicao)" />}
                 </AreaChart>
               </ResponsiveContainer>
             </div>

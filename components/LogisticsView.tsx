@@ -10,7 +10,8 @@ import {
   Plus,
   ChevronRight,
   ShieldCheck,
-  BrainCircuit
+  BrainCircuit,
+  Loader2
 } from 'lucide-react';
 import { FreightRoute } from '../types';
 
@@ -21,6 +22,17 @@ const MOCK_ROUTES: FreightRoute[] = [
 ];
 
 const LogisticsView: React.FC = () => {
+  const [isOptimizing, setIsOptimizing] = React.useState(false);
+  const [optimized, setOptimized] = React.useState(false);
+
+  const runOptimization = () => {
+    setIsOptimizing(true);
+    setTimeout(() => {
+      setIsOptimizing(false);
+      setOptimized(true);
+    }, 2500);
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#FDFBF7] overflow-hidden">
       <header className="p-6 border-b border-stone-200 bg-white/50 backdrop-blur-md flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -52,11 +64,18 @@ const LogisticsView: React.FC = () => {
             </div>
             <h3 className="text-3xl font-black mb-4 leading-tight">Rota Consolidada Detectada!</h3>
             <p className="text-stone-400 text-lg mb-8">
-              Identificamos 4 produtores de **Tomate Orgânico** em um raio de 5km. Podemos consolidar uma carga única para o CEASA-RJ amanhã às 04:00, reduzindo o custo de frete em **35%** para cada um.
+              {optimized 
+                ? "Otimização concluída! Encontramos a melhor rota para os 4 produtores. O custo total foi reduzido em 35% e a pegada de carbono em 22%."
+                : "Identificamos 4 produtores de **Tomate Orgânico** em um raio de 5km. Podemos consolidar uma carga única para o CEASA-RJ amanhã às 04:00, reduzindo o custo de frete em **35%** para cada um."}
             </p>
             <div className="flex flex-wrap gap-4">
-              <button className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-500 transition-all">
-                Aderir à Rota
+              <button 
+                onClick={runOptimization}
+                disabled={isOptimizing}
+                className="px-8 py-3 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-500 transition-all flex items-center gap-2"
+              >
+                {isOptimizing ? <Loader2 className="animate-spin" size={16} /> : <BrainCircuit size={16} />}
+                {isOptimizing ? 'Otimizando...' : optimized ? 'Rota Confirmada' : 'Otimizar com IA'}
               </button>
               <button className="px-8 py-3 bg-white/10 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-white/20 transition-all backdrop-blur-md border border-white/10">
                 Ver Detalhes

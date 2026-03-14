@@ -1,6 +1,7 @@
 
 import { GoogleGenAI, Modality, Type } from "@google/genai";
-import { Message, MessageRole, CropPlan, UserLocation, MarketQuote } from '../types';
+import { Message, MessageRole, CropPlan, UserLocation, MarketQuote, AITaskIntent, AITaskResponse } from '../types';
+import { cacheService } from './cacheService';
 
 // Initialize the client
 // API Key is injected by the environment.
@@ -250,6 +251,19 @@ const cropPlanSchema = {
   required: ["cropName", "bestSeason", "cycleDuration", "cycleDaysMin", "cycleDaysMax", "plantingSteps", "irrigation", "soilRequirements", "soilData", "seasonalRisks"]
 };
 
+const fieldNoteSchema = {
+  type: Type.OBJECT,
+  properties: {
+    activity: { type: Type.STRING, description: "Tipo de atividade (ex: Plantio, Colheita, Adubação, Irrigação, Aplicação de Defensivo)" },
+    product: { type: Type.STRING, description: "Produto ou cultura relacionada" },
+    quantity: { type: Type.STRING, description: "Quantidade mencionada (ex: '50kg', '2 sacas', '10 litros')" },
+    area: { type: Type.STRING, description: "Área ou talhão mencionado" },
+    date: { type: Type.STRING, description: "Data mencionada ou 'hoje'" },
+    summary: { type: Type.STRING, description: "Resumo amigável da nota" }
+  },
+  required: ["activity", "summary"]
+};
+
 const marketQuotesSchema = {
   type: Type.ARRAY,
   items: {
@@ -331,10 +345,123 @@ export const getCEASAQuotes = async (searchTerm?: string, location?: string): Pr
     const jsonText = response.text;
     if (!jsonText) return [];
     
-    return JSON.parse(jsonText) as MarketQuote[];
+    const quotes = JSON.parse(jsonText) as MarketQuote[];
+    
+    // Cache the results
+    if (quotes.length > 0) {
+      await cacheService.cacheMarketQuotes(quotes);
+    }
+    
+    return quotes;
 
   } catch (error) {
     console.error("Erro ao buscar cotações CEASA:", error);
-    return [];
+    // Try to return from cache if offline
+    return await cacheService.getCachedMarketQuotes();
+  }
+}
+
+export const parseFieldNote = async (text: string): Promise<any | null> => {
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return null;
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `Extraia informações estruturadas desta nota de campo de um agricultor: "${text}".
+    Identifique a atividade, o produto, a quantidade, a área e a data.
+    Seja preciso. Se não houver alguma informação, deixe em branco.`;
+
+    const response = await withRetry(() => ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: { parts: [{ text: prompt }] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: fieldNoteSchema,
+      }
+    }));
+
+    const jsonText = response.text;
+    if (!jsonText) return null;
+    
+    return JSON.parse(jsonText);
+
+  } catch (error) {
+    console.error("Erro ao processar nota de campo:", error);
+    return null;
+  }
+}
+
+const aiTaskSchema = {
+  type: Type.OBJECT,
+  properties: {
+    intent: { 
+      type: Type.STRING, 
+      enum: ['ADD_PRODUCT', 'CHECK_ORDER', 'FIELD_NOTE', 'GENERAL_CHAT', 'PLANT_ID'],
+      description: "A intenção principal do usuário"
+    },
+    confidence: { type: Type.NUMBER, description: "Confiança na identificação da intenção (0-1)" },
+    extractedData: {
+      type: Type.OBJECT,
+      description: "Dados extraídos baseados na intenção",
+      properties: {
+        productName: { type: Type.STRING },
+        quantity: { type: Type.STRING },
+        price: { type: Type.STRING },
+        orderId: { type: Type.STRING },
+        status: { type: Type.STRING },
+        activity: { type: Type.STRING },
+        location: { type: Type.STRING }
+      }
+    },
+    assistantMessage: { type: Type.STRING, description: "Uma resposta amigável no tom 'caipira moderno' confirmando a ação ou respondendo à dúvida" }
+  },
+  required: ["intent", "confidence", "assistantMessage"]
+};
+
+export const processUserTask = async (text: string, attachment?: { base64: string, mimeType: string }): Promise<AITaskResponse | null> => {
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) return null;
+    const ai = new GoogleGenAI({ apiKey });
+
+    const prompt = `Você é o assistente IA do IAC Farm. Analise a seguinte entrada do usuário e identifique a intenção e extraia os dados.
+    Entrada: "${text}"
+    
+    Intenções possíveis:
+    - ADD_PRODUCT: Usuário quer vender ou anunciar um produto (ex: "Quero vender 100kg de batata").
+    - CHECK_ORDER: Usuário quer saber o status de um pedido ou entrega (ex: "Onde está meu pedido 123?").
+    - FIELD_NOTE: Usuário quer registrar uma atividade na fazenda (ex: "Hoje adubei o talhão 2").
+    - PLANT_ID: Usuário enviou uma foto de planta para identificar (geralmente acompanhado de imagem).
+    - GENERAL_CHAT: Conversa geral ou dúvida que não se encaixa nas anteriores.
+    
+    Responda sempre no tom 'caipira moderno' do IAC Farm.`;
+
+    const contents: any[] = [{ text: prompt }];
+    if (attachment) {
+      contents.push({
+        inlineData: {
+          mimeType: attachment.mimeType,
+          data: attachment.base64
+        }
+      });
+    }
+
+    const response = await withRetry(() => ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: { parts: contents },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: aiTaskSchema,
+      }
+    }));
+
+    const jsonText = response.text;
+    if (!jsonText) return null;
+    
+    return JSON.parse(jsonText) as AITaskResponse;
+
+  } catch (error) {
+    console.error("Erro ao processar tarefa do usuário:", error);
+    return null;
   }
 }

@@ -14,7 +14,10 @@ import {
   BrainCircuit,
   Filter,
   X,
-  MapPin
+  MapPin,
+  Leaf,
+  Wheat,
+  Apple
 } from 'lucide-react';
 import { 
   LineChart, 
@@ -58,6 +61,12 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showMap, setShowMap] = useState(false);
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    type: 'all', // all, organic, conventional
+    status: 'all', // all, available, sold
+    maxDistance: 100 // km
+  });
 
   // Get user location for map
   useEffect(() => {
@@ -147,6 +156,29 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
   const filteredQuotes = useMemo(() => {
     return quotes.filter(q => q.product.toLowerCase().includes(searchTerm.toLowerCase()));
   }, [searchTerm, quotes]);
+
+  const filteredOffers = useMemo(() => {
+    return offers.filter(offer => {
+      // Search term
+      const matchesSearch = offer.product.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           offer.location.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      // Type filter
+      const matchesType = filters.type === 'all' || 
+                         (filters.type === 'organic' && offer.isOrganic) || 
+                         (filters.type === 'conventional' && !offer.isOrganic);
+      
+      // Status filter
+      const matchesStatus = filters.status === 'all' || offer.status === filters.status;
+      
+      // Distance filter (Mocking distance since we don't have real coords for all)
+      // In a real app, we'd calculate this using Haversine formula
+      const mockDistance = (offer.id.length % 50) + 5; // Deterministic mock distance
+      const matchesDistance = mockDistance <= filters.maxDistance;
+
+      return matchesSearch && matchesType && matchesStatus && matchesDistance;
+    });
+  }, [searchTerm, offers, filters]);
 
   return (
     <div className="flex flex-col h-full bg-[#FDFBF7] overflow-hidden">
@@ -361,7 +393,7 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
                   </div>
                   <div>
                     <div className="text-[10px] font-black text-stone-400 uppercase tracking-widest">Ofertas Ativas</div>
-                    <div className="text-xl font-black text-stone-900">{offers.length}</div>
+                    <div className="text-xl font-black text-stone-900">{filteredOffers.length}</div>
                   </div>
                 </div>
                 <div className="bg-white border border-stone-200 p-4 rounded-2xl shadow-sm flex items-center gap-4">
@@ -386,16 +418,86 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
                   </div>
                 </button>
               </div>
-              {currentUser?.role === UserRole.PRODUCER && (
+              <div className="flex items-center gap-3">
                 <button 
-                  onClick={() => setIsAddingOffer(true)}
-                  className="flex items-center gap-2 px-6 py-3 bg-stone-900 text-white rounded-2xl font-bold text-sm hover:bg-stone-800 transition-all shadow-lg shadow-stone-200"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className={`p-3 rounded-2xl border transition-all flex items-center gap-2 font-bold text-sm ${showFilters ? 'bg-orange-600 border-orange-600 text-white' : 'bg-white border-stone-200 text-stone-600 hover:border-orange-500'}`}
                 >
-                  <Plus size={18} />
-                  ANUNCIAR MINHA SAFRA
+                  <Filter size={18} />
+                  Filtros
                 </button>
-              )}
+                {currentUser?.role === UserRole.PRODUCER && (
+                  <button 
+                    onClick={() => setIsAddingOffer(true)}
+                    className="flex items-center gap-2 px-6 py-3 bg-stone-900 text-white rounded-2xl font-bold text-sm hover:bg-stone-800 transition-all shadow-lg shadow-stone-200"
+                  >
+                    <Plus size={18} />
+                    ANUNCIAR MINHA SAFRA
+                  </button>
+                )}
+              </div>
             </div>
+
+            {/* Filters Bar */}
+            {showFilters && (
+              <div className="bg-white border border-stone-200 p-6 rounded-3xl shadow-sm animate-in slide-in-from-top-4 duration-200">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div>
+                    <label className="block text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Busca</label>
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={16} />
+                      <input 
+                        type="text" 
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Produto ou local..."
+                        className="w-full pl-10 pr-4 py-2 bg-stone-50 border border-stone-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Tipo de Cultivo</label>
+                    <select 
+                      value={filters.type}
+                      onChange={(e) => setFilters({...filters, type: e.target.value})}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                    >
+                      <option value="all">Todos os Tipos</option>
+                      <option value="organic">Apenas Orgânicos</option>
+                      <option value="conventional">Convencional</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Status</label>
+                    <select 
+                      value={filters.status}
+                      onChange={(e) => setFilters({...filters, status: e.target.value})}
+                      className="w-full bg-stone-50 border border-stone-200 rounded-xl px-4 py-2 text-sm font-bold focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                    >
+                      <option value="all">Todos os Status</option>
+                      <option value="available">Disponível</option>
+                      <option value="sold">Vendido</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">Distância Máxima: {filters.maxDistance}km</label>
+                    <input 
+                      type="range" 
+                      min="5" 
+                      max="200" 
+                      step="5"
+                      value={filters.maxDistance}
+                      onChange={(e) => setFilters({...filters, maxDistance: Number(e.target.value)})}
+                      className="w-full h-2 bg-stone-200 rounded-lg appearance-none cursor-pointer accent-orange-600"
+                    />
+                    <div className="flex justify-between text-[10px] font-bold text-stone-400 mt-1">
+                      <span>5km</span>
+                      <span>200km</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Marketplace Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -406,40 +508,43 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
                   Ofertas de Produtores (Região)
                 </h3>
                 <div className="space-y-4">
-                  {offers.length > 0 ? (
-                    offers.map(offer => (
-                      <div key={offer.id} className="bg-white border border-stone-200 rounded-2xl p-5 hover:border-green-500 transition-all cursor-pointer group shadow-sm">
-                        <div className="flex justify-between items-start mb-4">
-                          <div>
-                            <h4 className="text-lg font-black text-stone-900 group-hover:text-green-600 transition-colors">{offer.product}</h4>
-                            <p className="text-xs text-stone-500 font-medium">{offer.location} • {offer.isOrganic ? 'Orgânico' : 'Convencional'}</p>
-                          </div>
-                          <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase ${
-                            offer.status === 'available' ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-500'
-                          }`}>
-                            {offer.status === 'available' ? 'Disponível' : 'Vendido'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between border-t border-stone-100 pt-4">
-                          <div className="flex gap-4">
+                  {filteredOffers.length > 0 ? (
+                    filteredOffers.map(offer => {
+                      const mockDistance = (offer.id.length % 50) + 5;
+                      return (
+                        <div key={offer.id} className="bg-white border border-stone-200 rounded-2xl p-5 hover:border-green-500 transition-all cursor-pointer group shadow-sm">
+                          <div className="flex justify-between items-start mb-4">
                             <div>
-                              <div className="text-[10px] font-bold text-stone-400 uppercase">Qtd</div>
-                              <div className="text-sm font-black">{offer.quantity}{offer.unit}</div>
+                              <h4 className="text-lg font-black text-stone-900 group-hover:text-green-600 transition-colors">{offer.product}</h4>
+                              <p className="text-xs text-stone-500 font-medium">{offer.location} • {offer.isOrganic ? 'Orgânico' : 'Convencional'} • {mockDistance}km</p>
                             </div>
-                            <div>
-                              <div className="text-[10px] font-bold text-stone-400 uppercase">Preço</div>
-                              <div className="text-sm font-black text-green-600">R$ {offer.price.toFixed(2)}/{offer.unit}</div>
-                            </div>
+                            <span className={`px-3 py-1 text-[10px] font-black rounded-full uppercase ${
+                              offer.status === 'available' ? 'bg-green-100 text-green-700' : 'bg-stone-100 text-stone-500'
+                            }`}>
+                              {offer.status === 'available' ? 'Disponível' : 'Vendido'}
+                            </span>
                           </div>
-                          <button className="p-2 bg-stone-50 rounded-xl text-stone-400 group-hover:text-green-600 group-hover:bg-green-50 transition-all">
-                            <ArrowRight size={20} />
-                          </button>
+                          <div className="flex items-center justify-between border-t border-stone-100 pt-4">
+                            <div className="flex gap-4">
+                              <div>
+                                <div className="text-[10px] font-bold text-stone-400 uppercase">Qtd</div>
+                                <div className="text-sm font-black">{offer.quantity}{offer.unit}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-bold text-stone-400 uppercase">Preço</div>
+                                <div className="text-sm font-black text-green-600">R$ {offer.price.toFixed(2)}/{offer.unit}</div>
+                              </div>
+                            </div>
+                            <button className="p-2 bg-stone-50 rounded-xl text-stone-400 group-hover:text-green-600 group-hover:bg-green-50 transition-all">
+                              <ArrowRight size={20} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="p-12 text-center text-stone-400 text-sm bg-white rounded-2xl border border-dashed border-stone-200">
-                      Nenhuma oferta ativa no momento.
+                      Nenhuma oferta encontrada com os filtros selecionados.
                     </div>
                   )}
                 </div>
@@ -614,11 +719,11 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
 
                 {/* Producer Markers */}
                 {[
-                  { id: 1, name: 'Sítio das Flores', product: 'Brócolis', top: '30%', left: '40%', color: 'bg-green-600' },
-                  { id: 2, name: 'Fazenda Sol Nascente', product: 'Milho', top: '60%', left: '35%', color: 'bg-orange-600' },
-                  { id: 3, name: 'Recanto Verde', product: 'Morango', top: '45%', left: '65%', color: 'bg-red-600' },
-                  { id: 4, name: 'Horta do Vale', product: 'Alface', top: '25%', left: '70%', color: 'bg-emerald-600' },
-                  { id: 5, name: 'Agro Macacu', product: 'Tomate', top: '70%', left: '55%', color: 'bg-red-500' },
+                  { id: 1, name: 'Sítio das Flores', product: 'Brócolis', top: '30%', left: '40%', color: 'bg-green-600', icon: Leaf },
+                  { id: 2, name: 'Fazenda Sol Nascente', product: 'Milho', top: '60%', left: '35%', color: 'bg-orange-600', icon: Wheat },
+                  { id: 3, name: 'Recanto Verde', product: 'Morango', top: '45%', left: '65%', color: 'bg-red-600', icon: Apple },
+                  { id: 4, name: 'Horta do Vale', product: 'Alface', top: '25%', left: '70%', color: 'bg-emerald-600', icon: Leaf },
+                  { id: 5, name: 'Agro Macacu', product: 'Tomate', top: '70%', left: '55%', color: 'bg-red-500', icon: Apple },
                 ].map((producer) => (
                   <div 
                     key={producer.id}
@@ -626,10 +731,10 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
                     style={{ top: producer.top, left: producer.left }}
                   >
                     <div className="relative">
-                      <div className={`w-8 h-8 ${producer.color} rounded-xl border-2 border-white shadow-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                        <MapPin size={16} className="text-white" />
+                      <div className={`w-10 h-10 ${producer.color} rounded-xl border-2 border-white shadow-lg flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                        <producer.icon size={20} className="text-white" />
                       </div>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50">
                         <div className="bg-white p-3 rounded-2xl shadow-xl border border-stone-100 min-w-[150px]">
                           <div className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">{producer.product}</div>
                           <div className="text-sm font-black text-stone-900">{producer.name}</div>
@@ -648,19 +753,25 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
               {/* Map Controls */}
               <div className="absolute bottom-6 left-6 space-y-2">
                 <div className="bg-white/80 backdrop-blur-md p-4 rounded-2xl border border-white/20 shadow-xl max-w-xs">
-                  <h4 className="text-xs font-black text-stone-900 uppercase tracking-widest mb-3">Legenda</h4>
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-green-600 rounded-full"></div>
-                      <span className="text-[10px] font-bold text-stone-600">Hortaliças</span>
+                  <h4 className="text-xs font-black text-stone-900 uppercase tracking-widest mb-3">Legenda de Culturas</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-green-600 rounded-lg flex items-center justify-center shadow-sm">
+                        <Leaf size={16} className="text-white" />
+                      </div>
+                      <span className="text-[10px] font-black text-stone-600 uppercase tracking-wider">Hortaliças & Folhosas</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-orange-600 rounded-full"></div>
-                      <span className="text-[10px] font-bold text-stone-600">Grãos & Cereais</span>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-orange-600 rounded-lg flex items-center justify-center shadow-sm">
+                        <Wheat size={16} className="text-white" />
+                      </div>
+                      <span className="text-[10px] font-black text-stone-600 uppercase tracking-wider">Grãos & Cereais</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 bg-red-600 rounded-full"></div>
-                      <span className="text-[10px] font-bold text-stone-600">Frutas</span>
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-red-600 rounded-lg flex items-center justify-center shadow-sm">
+                        <Apple size={16} className="text-white" />
+                      </div>
+                      <span className="text-[10px] font-black text-stone-600 uppercase tracking-wider">Frutas & Pomares</span>
                     </div>
                   </div>
                 </div>
