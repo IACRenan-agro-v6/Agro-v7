@@ -7,8 +7,8 @@ import { cacheService } from './cacheService';
 // API Key is injected by the environment.
 const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
 
-// Fixed: Using gemini-3-flash-preview for faster responses and higher rate limits during presentations
-const MODEL_NAME = 'gemini-3-flash-preview';
+// Fixed: Using gemini-2.5-flash for higher rate limits
+const MODEL_NAME = 'gemini-2.5-flash';
 const TTS_MODEL_NAME = 'gemini-2.5-flash-preview-tts';
 
 /**
