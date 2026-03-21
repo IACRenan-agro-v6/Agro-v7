@@ -5,7 +5,11 @@ import { cacheService } from './cacheService';
 
 // Initialize the client
 // API Key is injected by the environment.
-const getApiKey = () => import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+const getApiKey = () => {
+  const key = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
+  console.log('API Key found:', !!key);
+  return key;
+};
 
 // Fixed: Using gemini-2.5-flash for higher rate limits
 const MODEL_NAME = 'gemini-2.5-flash';
