@@ -146,27 +146,32 @@ export const sendMessageToGemini = async (
     return result.text || "Opa, deu um nó aqui e não consegui analisar. Pode repetir?";
 
   } catch (error: any) {
-    console.error("Erro na API Gemini:", error);
+    console.error("Erro detalhado da API Gemini:", error);
     const apiKey = getApiKey();
     const errorMessage = error?.message?.toLowerCase() || '';
+    const errorStatus = error?.status || error?.code || 'N/A';
     
+    // Log technical details for the user to see in console
+    console.log(`Status do Erro: ${errorStatus}`);
+    console.log(`Mensagem Original: ${error?.message}`);
+
     if (errorMessage.includes('api_key_invalid') || !apiKey) {
-        return "Eita, tive um problema com a minha chave de inteligência. Verifique se a VITE_GEMINI_API_KEY na Vercel está correta.";
+        return "Eita, tive um problema com a minha chave de inteligência. Verifique se a VITE_GEMINI_API_KEY está correta e se ela pertence ao projeto com faturamento ativo.";
     }
     
     if (errorMessage.includes('quota') || errorMessage.includes('429')) {
-        return "Opa, o limite de uso gratuito foi atingido. Para continuar, você precisa ativar o faturamento (Billing) no Google AI Studio e vincular um cartão de crédito.";
+        return `Opa, o limite de uso foi atingido (Erro ${errorStatus}). Mesmo no plano pago, o Google impõe limites iniciais. Verifique a aba 'Cotas' no seu console do Google Cloud.`;
     }
 
     if (errorMessage.includes('403') || errorMessage.includes('permission_denied')) {
-        return "Eita, o acesso foi negado. Verifique se o faturamento está ativo no Google Cloud para este projeto de API.";
+        return "Eita, o acesso foi negado (Erro 403). Isso acontece quando a API 'Generative Language API' não está ativada no seu projeto do Google Cloud ou o faturamento foi suspenso.";
     }
 
     if (errorMessage.includes('503') || errorMessage.includes('high demand') || errorMessage.includes('overloaded')) {
-        return "Opa, o sistema tá um tanto sobrecarregado agora. Tenta de novo em um minutinho, companheiro!";
+        return "Opa, o sistema do Google tá um tanto sobrecarregado agora. Tenta de novo em um minutinho, companheiro!";
     }
     
-    return "Eita, deu um problema na conexão ou na análise. Tenta de novo, companheiro.";
+    return `Eita, deu um problema na análise (Erro ${errorStatus}). Detalhe: ${error?.message?.substring(0, 100)}...`;
   }
 };
 
