@@ -21,7 +21,8 @@ import {
   ShoppingCart,
   LineChart,
   HeartPulse,
-  Users
+  Users,
+  LogOut
 } from 'lucide-react';
 import { WeatherInfo, ViewMode, UserRole } from '../types';
 
@@ -35,6 +36,7 @@ interface SidebarProps {
   userLocation: { lat: number; lng: number } | null;
   weatherInfo: WeatherInfo | null;
   userRole: UserRole;
+  onLogout: () => void;
 }
 
 // Helper for Premium Icons
@@ -106,7 +108,7 @@ const AgroBrasilLogo = ({ collapsed }: { collapsed?: boolean }) => (
 
 const Sidebar: React.FC<SidebarProps> = ({ 
   view, setView, isSidebarOpen, setIsSidebarOpen, 
-  isSidebarCollapsed, setIsSidebarCollapsed, userLocation, weatherInfo, userRole
+  isSidebarCollapsed, setIsSidebarCollapsed, userLocation, weatherInfo, userRole, onLogout
 }) => {
 
   const NavItem = ({ mode, icon: Icon, label }: { mode: ViewMode, icon: any, label: string }) => {
@@ -229,6 +231,27 @@ const Sidebar: React.FC<SidebarProps> = ({
 
           {!isSidebarCollapsed && <div className="my-2 border-t border-stone-100 mx-4"></div>}
           <NavItem mode="settings" icon={Settings} label="Configurações" />
+          
+          <button 
+            onClick={onLogout}
+            className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all font-medium group hover:bg-red-50 dark:hover:bg-red-900/20 border border-transparent hover:border-red-100 dark:hover:border-red-900/30 ${isSidebarCollapsed ? 'justify-center' : ''}`}
+            title={isSidebarCollapsed ? "Sair" : undefined}
+          >
+            <div className={`
+              relative flex items-center justify-center w-10 h-10 rounded-xl transition-all duration-300 flex-shrink-0
+              bg-gradient-to-br from-red-400 to-red-600 shadow-red-500/40
+              opacity-80 grayscale-[0.3] hover:grayscale-0 hover:opacity-100 hover:scale-105
+            `}>
+              <div className="absolute inset-0 bg-white/20 rounded-2xl pointer-events-none border border-white/30"></div>
+              <LogOut size={20} className="text-white drop-shadow-md relative z-10" strokeWidth={2.5} />
+            </div>
+            
+            {!isSidebarCollapsed && (
+              <span className="text-sm tracking-wide transition-colors whitespace-nowrap overflow-hidden text-ellipsis text-red-500 group-hover:text-red-600 font-bold">
+                Sair do Sistema
+              </span>
+            )}
+          </button>
         </nav>
 
         {/* Footer / Weather Widget */}

@@ -11,8 +11,8 @@ const getApiKey = () => {
   return key;
 };
 
-// Fixed: Using gemini-2.5-flash for higher rate limits
-const MODEL_NAME = 'gemini-2.5-flash';
+// Fixed: Using gemini-3-flash-preview as the standard for multimodal tasks
+const MODEL_NAME = 'gemini-3-flash-preview';
 const TTS_MODEL_NAME = 'gemini-2.5-flash-preview-tts';
 
 /**
@@ -25,10 +25,12 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 5, delay = 1000): Pr
     const errorMessage = error?.message?.toLowerCase() || '';
     const statusCode = error?.status || error?.code || 0;
     
+    // Check for quota or transient errors
     const isTransient = statusCode === 503 || 
                         statusCode === 429 ||
                         errorMessage.includes('503') || 
                         errorMessage.includes('429') || 
+                        errorMessage.includes('quota') ||
                         errorMessage.includes('high demand') ||
                         errorMessage.includes('overloaded') ||
                         errorMessage.includes('deadline exceeded') ||
@@ -146,12 +148,24 @@ export const sendMessageToGemini = async (
   } catch (error: any) {
     console.error("Erro na API Gemini:", error);
     const apiKey = getApiKey();
-    if (error?.message?.includes('API_KEY_INVALID') || !apiKey) {
-        return "Eita, tive um problema com a minha chave de inteligência. Verifique se a VITE_GEMINI_API_KEY na Vercel está correta e se o projeto tem faturamento ativo.";
+    const errorMessage = error?.message?.toLowerCase() || '';
+    
+    if (errorMessage.includes('api_key_invalid') || !apiKey) {
+        return "Eita, tive um problema com a minha chave de inteligência. Verifique se a VITE_GEMINI_API_KEY na Vercel está correta.";
     }
-    if (error?.message?.includes('503') || error?.message?.includes('high demand')) {
+    
+    if (errorMessage.includes('quota') || errorMessage.includes('429')) {
+        return "Opa, o limite de uso gratuito foi atingido. Para continuar, você precisa ativar o faturamento (Billing) no Google AI Studio e vincular um cartão de crédito.";
+    }
+
+    if (errorMessage.includes('403') || errorMessage.includes('permission_denied')) {
+        return "Eita, o acesso foi negado. Verifique se o faturamento está ativo no Google Cloud para este projeto de API.";
+    }
+
+    if (errorMessage.includes('503') || errorMessage.includes('high demand') || errorMessage.includes('overloaded')) {
         return "Opa, o sistema tá um tanto sobrecarregado agora. Tenta de novo em um minutinho, companheiro!";
     }
+    
     return "Eita, deu um problema na conexão ou na análise. Tenta de novo, companheiro.";
   }
 };

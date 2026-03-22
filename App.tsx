@@ -55,12 +55,23 @@ Envie uma foto, um áudio ou escolha uma das opções abaixo!`,
 };
 
 const App: React.FC = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('agro_isAuthenticated') === 'true';
+  });
   const [isRegistering, setIsRegistering] = useState(false);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
-  const [userRole, setUserRole] = useState<UserRole>(UserRole.CONSUMER);
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [view, setView] = useState<ViewMode | 'registry'>('chat');
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    const saved = localStorage.getItem('agro_currentUser');
+    return saved ? JSON.parse(saved) : null;
+  });
+  const [userRole, setUserRole] = useState<UserRole>(() => {
+    return (localStorage.getItem('agro_userRole') as UserRole) || UserRole.CONSUMER;
+  });
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('agro_isDarkMode') === 'true';
+  });
+  const [view, setView] = useState<ViewMode | 'registry'>(() => {
+    return (localStorage.getItem('agro_currentView') as ViewMode | 'registry') || 'chat';
+  });
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
 
@@ -305,18 +316,31 @@ const App: React.FC = () => {
   }, [isDarkMode]);
 
   useEffect(() => {
+    localStorage.setItem('agro_isAuthenticated', isAuthenticated.toString());
+    if (currentUser) {
+      localStorage.setItem('agro_currentUser', JSON.stringify(currentUser));
+    } else {
+      localStorage.removeItem('agro_currentUser');
+    }
+    localStorage.setItem('agro_userRole', userRole);
+    localStorage.setItem('agro_currentView', view);
+    localStorage.setItem('agro_isDarkMode', isDarkMode.toString());
+  }, [isAuthenticated, currentUser, userRole, view, isDarkMode]);
+
+  useEffect(() => {
     const checkSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         setIsAuthenticated(true);
-        setCurrentUser({
+        const profile = {
           id: session.user.id,
           email: session.user.email || '',
-          role: UserRole.CONSUMER, // Default
+          role: userRole, // Keep current role or default
           fullName: session.user.user_metadata?.full_name || 'Usuário',
           document: '',
           createdAt: new Date().toISOString()
-        });
+        };
+        setCurrentUser(profile);
       }
     };
     checkSession();
@@ -325,13 +349,32 @@ const App: React.FC = () => {
       if (session?.user) {
         setIsAuthenticated(true);
       } else {
-        setIsAuthenticated(false);
-        setCurrentUser(null);
+        // Only clear if it wasn't a mock login (dev-user)
+        const savedUser = localStorage.getItem('agro_currentUser');
+        const isMock = savedUser && JSON.parse(savedUser).id === 'dev-user';
+        
+        if (!isMock) {
+          setIsAuthenticated(false);
+          setCurrentUser(null);
+          localStorage.removeItem('agro_isAuthenticated');
+          localStorage.removeItem('agro_currentUser');
+        }
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    localStorage.removeItem('agro_isAuthenticated');
+    localStorage.removeItem('agro_currentUser');
+    localStorage.removeItem('agro_userRole');
+    localStorage.removeItem('agro_currentView');
+    setView('chat');
+  };
 
   const handleLogin = (role: UserRole) => {
     setUserRole(role);
@@ -454,6 +497,7 @@ const App: React.FC = () => {
         userLocation={userLocation}
         weatherInfo={weatherInfo}
         userRole={userRole}
+        onLogout={handleLogout}
       />
 
       {isSidebarOpen && <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm z-30 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
