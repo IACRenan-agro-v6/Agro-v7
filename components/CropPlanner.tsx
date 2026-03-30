@@ -11,15 +11,33 @@ interface CropPlannerProps {
 }
 
 const CropPlanner: React.FC<CropPlannerProps> = ({ userLocation, setView }) => {
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(() => {
+    return localStorage.getItem('agro_planner_searchTerm') || '';
+  });
   const [loading, setLoading] = useState(false);
-  const [plan, setPlan] = useState<CropPlan | null>(null);
+  const [plan, setPlan] = useState<CropPlan | null>(() => {
+    const saved = localStorage.getItem('agro_planner_plan');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   
   // Agenda State
-  const [plantingDate, setPlantingDate] = useState('');
+  const [plantingDate, setPlantingDate] = useState(() => {
+    return localStorage.getItem('agro_planner_plantingDate') || '';
+  });
+
+  // Persist state
+  React.useEffect(() => {
+    localStorage.setItem('agro_planner_searchTerm', searchTerm);
+    if (plan) {
+      localStorage.setItem('agro_planner_plan', JSON.stringify(plan));
+    } else {
+      localStorage.removeItem('agro_planner_plan');
+    }
+    localStorage.setItem('agro_planner_plantingDate', plantingDate);
+  }, [searchTerm, plan, plantingDate]);
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();

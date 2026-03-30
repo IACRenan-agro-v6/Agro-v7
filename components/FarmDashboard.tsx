@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Cell,
   PieChart, Pie, Sector, LineChart, Line, AreaChart, Area, LabelList
@@ -81,13 +82,20 @@ const CardIcon3D = ({ type }: { type: 'revenue' | 'sales' | 'stock' }) => {
 };
 
 const FarmDashboard: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'finance' | 'history' | 'energy'>('finance');
+  const [activeTab, setActiveTab] = useState<'finance' | 'history' | 'energy'>(() => {
+    return (localStorage.getItem('agro_dashboard_activeTab') as 'finance' | 'history' | 'energy') || 'finance';
+  });
   const [activeIndex, setActiveIndex] = React.useState(0);
   const [selectedStore, setSelectedStore] = useState<string | null>(null);
   const [cropPlans, setCropPlans] = useState<CropPlan[]>([]);
   const [loadingPlans, setLoadingPlans] = useState(false);
   
   const batteryLevel = 78; // %
+
+  // Persist state
+  useEffect(() => {
+    localStorage.setItem('agro_dashboard_activeTab', activeTab);
+  }, [activeTab]);
 
   useEffect(() => {
     const fetchPlans = async () => {
@@ -132,10 +140,14 @@ const FarmDashboard: React.FC = () => {
   };
 
   return (
-    <div className="w-full h-full overflow-y-auto p-4 md:p-8 animate-fade-in pb-24 relative">
+    <div className="w-full h-full overflow-y-auto p-4 md:p-8 pb-24 relative">
       
       {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex flex-col md:flex-row justify-between items-end mb-8 gap-4"
+      >
         <div>
           <h2 className="text-3xl font-bold text-farm-900 mb-2 flex items-center gap-3">
             <Activity className="text-farm-600" />
@@ -164,14 +176,25 @@ const FarmDashboard: React.FC = () => {
                 <Zap size={16} /> Energia Solar
             </button>
         </div>
-      </div>
+      </motion.div>
 
-      {/* FINANCE TAB CONTENT */}
-      {activeTab === 'finance' && (
-        <div className="animate-slide-up">
-            {/* KPI Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-                <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm relative overflow-visible group hover:border-farm-300 hover:shadow-lg transition-all duration-300">
+      <AnimatePresence mode="wait">
+        {/* FINANCE TAB CONTENT */}
+        {activeTab === 'finance' && (
+          <motion.div 
+            key="finance"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.2 }}
+            className="space-y-8"
+          >
+              {/* KPI Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                  <motion.div 
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm relative overflow-visible group hover:border-farm-300 hover:shadow-lg transition-all duration-300"
+                  >
                     <div className="absolute -top-6 -right-6 scale-75 md:scale-90 group-hover:scale-100 transition-transform duration-300">
                         <CardIcon3D type="revenue" />
                     </div>
@@ -182,9 +205,12 @@ const FarmDashboard: React.FC = () => {
                             <span className="flex items-center text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 font-bold text-xs"><ArrowUpRight size={14} /> +12.5%</span>
                         </div>
                     </div>
-                </div>
+                  </motion.div>
 
-                <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm relative overflow-visible group hover:border-blue-300 hover:shadow-lg transition-all duration-300">
+                  <motion.div 
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm relative overflow-visible group hover:border-blue-300 hover:shadow-lg transition-all duration-300"
+                  >
                     <div className="absolute -top-6 -right-6 scale-75 md:scale-90 group-hover:scale-100 transition-transform duration-300">
                         <CardIcon3D type="sales" />
                     </div>
@@ -195,9 +221,12 @@ const FarmDashboard: React.FC = () => {
                             <span className="flex items-center text-green-700 bg-green-50 px-1.5 py-0.5 rounded border border-green-100 font-bold text-xs"><ArrowUpRight size={14} /> +5.2%</span>
                         </div>
                     </div>
-                </div>
+                  </motion.div>
 
-                <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm relative overflow-visible group hover:border-amber-300 hover:shadow-lg transition-all duration-300">
+                  <motion.div 
+                    whileHover={{ scale: 1.02 }}
+                    className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm relative overflow-visible group hover:border-amber-300 hover:shadow-lg transition-all duration-300"
+                  >
                     <div className="absolute -top-6 -right-6 scale-75 md:scale-90 group-hover:scale-100 transition-transform duration-300">
                         <CardIcon3D type="stock" />
                     </div>
@@ -208,128 +237,135 @@ const FarmDashboard: React.FC = () => {
                             <span className="flex items-center text-red-700 bg-red-50 px-1.5 py-0.5 rounded border border-red-100 font-bold text-xs"><ArrowDownRight size={14} /> -2.1%</span>
                         </div>
                     </div>
-                </div>
-            </div>
+                  </motion.div>
+              </div>
 
-            {/* Historical Revenue Chart */}
-            <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm mb-6 flex flex-col">
-                <div className="flex justify-between items-center mb-6">
-                    <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
-                    <Calendar className="text-farm-600" size={20} />
-                    Desempenho Semanal (Últimos 7 dias)
-                    </h3>
-                </div>
-                <div className="w-full h-[250px] flex-1">
-                    <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={REVENUE_HISTORY} margin={{ top: 20, right: 30, left: 10, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                        <XAxis dataKey="day" stroke="#9ca3af" tick={{ fontSize: 12, fill: '#6b7280', fontWeight: 600 }} axisLine={false} tickLine={false} dy={10} />
-                        <YAxis stroke="#9ca3af" tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(value) => `R$${value/1000}k`} />
-                        <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(53, 173, 115, 0.2)', strokeWidth: 2 }} />
-                        <Line type="monotone" dataKey="value" stroke="#35ad73" strokeWidth={4} dot={{ r: 4, fill: '#fff', stroke: '#35ad73', strokeWidth: 3 }} activeDot={{ r: 7, fill: '#35ad73', stroke: '#fff', strokeWidth: 2 }}>
-                            <LabelList dataKey="value" position="top" offset={10} formatter={(val: number) => `${(val/1000).toFixed(1)}k`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#35ad73' }} />
-                        </Line>
-                    </LineChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
+              {/* Historical Revenue Chart */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm mb-6 flex flex-col">
+                  <div className="flex justify-between items-center mb-6">
+                      <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2">
+                      <Calendar className="text-farm-600" size={20} />
+                      Desempenho Semanal (Últimos 7 dias)
+                      </h3>
+                  </div>
+                  <div className="w-full h-[250px] flex-1">
+                      <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={REVENUE_HISTORY} margin={{ top: 20, right: 30, left: 10, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+                          <XAxis dataKey="day" stroke="#9ca3af" tick={{ fontSize: 12, fill: '#6b7280', fontWeight: 600 }} axisLine={false} tickLine={false} dy={10} />
+                          <YAxis stroke="#9ca3af" tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(value) => `R$${value/1000}k`} />
+                          <RechartsTooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(53, 173, 115, 0.2)', strokeWidth: 2 }} />
+                          <Line type="monotone" dataKey="value" stroke="#35ad73" strokeWidth={4} dot={{ r: 4, fill: '#fff', stroke: '#35ad73', strokeWidth: 3 }} activeDot={{ r: 7, fill: '#35ad73', stroke: '#fff', strokeWidth: 2 }}>
+                              <LabelList dataKey="value" position="top" offset={10} formatter={(val: number) => `${(val/1000).toFixed(1)}k`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#35ad73' }} />
+                          </Line>
+                      </LineChart>
+                      </ResponsiveContainer>
+                  </div>
+              </div>
 
-            {/* Charts Split */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><TrendingUp className="text-farm-600" size={20} /> Faturamento por Loja (Hoje)</h3>
-                    </div>
-                    <div className="w-full h-[350px] flex-1">
-                        <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={REVENUE_BY_STORE} margin={{ top: 30, right: 10, left: 0, bottom: 0 }} barSize={60}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                            <XAxis 
-                              dataKey="name" 
-                              stroke="#9ca3af" 
-                              tick={{ fontSize: 10, fill: '#6b7280', fontWeight: 600 }} 
-                              axisLine={false} 
-                              tickLine={false} 
-                              dy={10}
-                              interval={0}
-                            />
-                            <YAxis stroke="#9ca3af" tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(value) => `R$${value/1000}k`} />
-                            <RechartsTooltip cursor={{fill: 'rgba(0,0,0,0.02)'}} content={<CustomTooltip />} />
-                            <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                                {REVENUE_BY_STORE.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
-                                <LabelList dataKey="value" position="top" formatter={(val: number) => `R$ ${(val/1000).toFixed(1)}k`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#6b7280' }} />
-                            </Bar>
-                        </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
+              {/* Charts Split */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                  <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col">
+                      <div className="flex justify-between items-center mb-6">
+                          <h3 className="text-lg font-bold text-stone-800 flex items-center gap-2"><TrendingUp className="text-farm-600" size={20} /> Faturamento por Loja (Hoje)</h3>
+                      </div>
+                      <div className="w-full h-[350px] flex-1">
+                          <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={REVENUE_BY_STORE} margin={{ top: 30, right: 10, left: 0, bottom: 0 }} barSize={60}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+                              <XAxis 
+                                dataKey="name" 
+                                stroke="#9ca3af" 
+                                tick={{ fontSize: 10, fill: '#6b7280', fontWeight: 600 }} 
+                                axisLine={false} 
+                                tickLine={false} 
+                                dy={10}
+                                interval={0}
+                              />
+                              <YAxis stroke="#9ca3af" tick={{ fontSize: 12, fill: '#9ca3af' }} axisLine={false} tickLine={false} tickFormatter={(value) => `R$${value/1000}k`} />
+                              <RechartsTooltip cursor={{fill: 'rgba(0,0,0,0.02)'}} content={<CustomTooltip />} />
+                              <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                                  {REVENUE_BY_STORE.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}
+                                  <LabelList dataKey="value" position="top" formatter={(val: number) => `R$ ${(val/1000).toFixed(1)}k`} style={{ fontSize: '11px', fontWeight: 'bold', fill: '#6b7280' }} />
+                              </Bar>
+                          </BarChart>
+                          </ResponsiveContainer>
+                      </div>
+                  </div>
 
-                <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col">
-                    <h3 className="text-lg font-bold text-stone-800 mb-2 flex items-center gap-2"><Package className="text-amber-500" size={20} /> Estoque por Produto</h3>
-                    <div className="w-full h-[350px] relative flex-1">
-                        <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                            <Pie data={STOCK_DATA} cx="50%" cy="50%" innerRadius={70} outerRadius={100} fill="#8884d8" dataKey="value" onMouseEnter={onPieEnter} paddingAngle={5} stroke="none" label={({name, value}) => `${name}: ${value}t`} {...{ activeIndex, activeShape: renderActiveShape } as any}>
-                                {STOCK_DATA.map((entry, index) => {
-                                    const isLowStock = entry.value < LOW_STOCK_THRESHOLD;
-                                    return <Cell key={`cell-${index}`} fill={isLowStock ? '#ef4444' : entry.color} stroke={isLowStock ? '#b91c1c' : 'none'} strokeWidth={isLowStock ? 2 : 0} />
-                                })}
-                            </Pie>
-                        </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                    <div className="flex justify-center mt-2">
-                        <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 px-3 py-1 rounded-full border border-red-100 font-bold">
-                        <AlertTriangle size={12} />
-                        <span>Itens em vermelho: Abaixo de {LOW_STOCK_THRESHOLD} ton</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
+                  <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm flex flex-col">
+                      <h3 className="text-lg font-bold text-stone-800 mb-2 flex items-center gap-2"><Package className="text-amber-500" size={20} /> Estoque por Produto</h3>
+                      <div className="w-full h-[350px] relative flex-1">
+                          <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                              <Pie data={STOCK_DATA} cx="50%" cy="50%" innerRadius={70} outerRadius={100} fill="#8884d8" dataKey="value" onMouseEnter={onPieEnter} paddingAngle={5} stroke="none" label={({name, value}) => `${name}: ${value}t`} {...{ activeIndex, activeShape: renderActiveShape } as any}>
+                                  {STOCK_DATA.map((entry, index) => {
+                                      const isLowStock = entry.value < LOW_STOCK_THRESHOLD;
+                                      return <Cell key={`cell-${index}`} fill={isLowStock ? '#ef4444' : entry.color} stroke={isLowStock ? '#b91c1c' : 'none'} strokeWidth={isLowStock ? 2 : 0} />
+                                  })}
+                              </Pie>
+                          </PieChart>
+                          </ResponsiveContainer>
+                      </div>
+                      <div className="flex justify-center mt-2">
+                          <div className="flex items-center gap-2 text-xs text-red-700 bg-red-50 px-3 py-1 rounded-full border border-red-100 font-bold">
+                          <AlertTriangle size={12} />
+                          <span>Itens em vermelho: Abaixo de {LOW_STOCK_THRESHOLD} ton</span>
+                          </div>
+                      </div>
+                  </div>
+              </div>
 
-            {/* Transaction List */}
-            <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
-                <h3 className="text-lg font-bold text-stone-800 mb-6 flex items-center gap-2"><Store className="text-blue-500" size={20} /> Últimas Movimentações (Por Loja)</h3>
-                <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                    <tr className="text-xs text-stone-400 uppercase tracking-widest border-b border-stone-100">
-                        <th className="pb-4 pl-4 font-bold">Loja / Canal</th>
-                        <th className="pb-4 font-bold">Produto</th>
-                        <th className="pb-4 font-bold">Horário</th>
-                        <th className="pb-4 font-bold">Valor</th>
-                        <th className="pb-4 pr-4 font-bold text-right">Status</th>
-                    </tr>
-                    </thead>
-                    <tbody className="text-sm">
-                    {RECENT_TRANSACTIONS.map((tx) => (
-                        <tr key={tx.id} className="group hover:bg-stone-50 transition-colors border-b border-stone-100 last:border-0">
-                        <td className="py-4 pl-4 font-bold text-stone-700 transition-colors">
-                            <button onClick={() => setSelectedStore(tx.store)} className="hover:text-farm-600 hover:underline flex items-center gap-2 text-left" title="Ver histórico desta loja">
-                                {tx.store}
-                                <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-farm-500" />
-                            </button>
-                        </td>
-                        <td className="py-4 text-stone-600 font-medium">{tx.product}</td>
-                        <td className="py-4 text-stone-400 font-mono text-xs">{tx.time}</td>
-                        <td className="py-4 font-bold text-stone-800">{tx.value}</td>
-                        <td className="py-4 pr-4 text-right">
-                            <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wide ${tx.status === 'completed' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
-                            {tx.status === 'completed' ? 'Concluído' : 'Pendente'}
-                            </span>
-                        </td>
-                        </tr>
-                    ))}
-                    </tbody>
-                </table>
-                </div>
-            </div>
-        </div>
-      )}
+              {/* Transaction List */}
+              <div className="bg-white p-6 rounded-3xl border border-stone-200 shadow-sm">
+                  <h3 className="text-lg font-bold text-stone-800 mb-6 flex items-center gap-2"><Store className="text-blue-500" size={20} /> Últimas Movimentações (Por Loja)</h3>
+                  <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                      <thead>
+                      <tr className="text-xs text-stone-400 uppercase tracking-widest border-b border-stone-100">
+                          <th className="pb-4 pl-4 font-bold">Loja / Canal</th>
+                          <th className="pb-4 font-bold">Produto</th>
+                          <th className="pb-4 font-bold">Horário</th>
+                          <th className="pb-4 font-bold">Valor</th>
+                          <th className="pb-4 pr-4 font-bold text-right">Status</th>
+                      </tr>
+                      </thead>
+                      <tbody className="text-sm">
+                      {RECENT_TRANSACTIONS.map((tx) => (
+                          <tr key={tx.id} className="group hover:bg-stone-50 transition-colors border-b border-stone-100 last:border-0">
+                          <td className="py-4 pl-4 font-bold text-stone-700 transition-colors">
+                              <button onClick={() => setSelectedStore(tx.store)} className="hover:text-farm-600 hover:underline flex items-center gap-2 text-left" title="Ver histórico desta loja">
+                                  {tx.store}
+                                  <ChevronRight size={14} className="opacity-0 group-hover:opacity-100 transition-opacity text-farm-500" />
+                              </button>
+                          </td>
+                          <td className="py-4 text-stone-600 font-medium">{tx.product}</td>
+                          <td className="py-4 text-stone-400 font-mono text-xs">{tx.time}</td>
+                          <td className="py-4 font-bold text-stone-800">{tx.value}</td>
+                          <td className="py-4 pr-4 text-right">
+                              <span className={`px-2 py-1 rounded text-xs font-bold uppercase tracking-wide ${tx.status === 'completed' ? 'bg-green-100 text-green-700 border border-green-200' : 'bg-amber-100 text-amber-700 border border-amber-200'}`}>
+                              {tx.status === 'completed' ? 'Concluído' : 'Pendente'}
+                              </span>
+                          </td>
+                          </tr>
+                      ))}
+                      </tbody>
+                  </table>
+                  </div>
+              </div>
+          </motion.div>
+        )}
 
-      {/* HISTORY & WEATHER TAB */}
-      {activeTab === 'history' && (
-          <div className="animate-slide-up space-y-6">
+        {/* HISTORY & WEATHER TAB */}
+        {activeTab === 'history' && (
+            <motion.div 
+              key="history"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-gradient-to-br from-blue-500 to-blue-700 text-white p-6 rounded-3xl relative overflow-hidden shadow-lg shadow-blue-500/20">
                       <div className="absolute top-0 right-0 p-8 opacity-20"><Thermometer size={100} /></div>
@@ -449,12 +485,19 @@ const FarmDashboard: React.FC = () => {
                       <p className="text-farm-900/80 text-sm leading-relaxed">O acúmulo de horas de frio foi excelente para a dormência das culturas de inverno. Espera-se uma brotação uniforme e vigorosa na primavera.</p>
                   </div>
               </div>
-          </div>
-      )}
+            </motion.div>
+        )}
 
-      {/* ENERGY TAB */}
-      {activeTab === 'energy' && (
-          <div className="animate-slide-up space-y-6">
+        {/* ENERGY TAB */}
+        {activeTab === 'energy' && (
+            <motion.div 
+              key="energy"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
+              className="space-y-6"
+            >
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="bg-white border border-stone-200 p-6 rounded-3xl shadow-sm relative overflow-hidden group hover:border-green-300 transition-colors">
                       <div className="flex justify-between items-start mb-6">
@@ -523,13 +566,25 @@ const FarmDashboard: React.FC = () => {
                     <div><div className="text-xs uppercase font-bold text-blue-600">Economia Estimada</div><div className="text-lg font-bold text-blue-800">R$ 1.250,00</div><div className="text-xs text-blue-700">Economia na conta de luz este mês.</div></div>
                  </div>
               </div>
-          </div>
-      )}
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-      {/* Store History Modal */}
-      {selectedStore && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-           <div className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden animate-slide-up border border-stone-200">
+        <AnimatePresence>
+        {/* Store History Modal */}
+        {selectedStore && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+          >
+             <motion.div 
+               initial={{ scale: 0.9, opacity: 0, y: 20 }}
+               animate={{ scale: 1, opacity: 1, y: 0 }}
+               exit={{ scale: 0.9, opacity: 0, y: 20 }}
+               className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden border border-stone-200"
+             >
               <div className="bg-stone-50 px-6 py-4 border-b border-stone-200 flex justify-between items-center">
                  <div className="flex items-center gap-3">
                     <div className="p-2 bg-white border border-stone-200 rounded-lg text-farm-600"><Store size={24} /></div>
@@ -561,10 +616,10 @@ const FarmDashboard: React.FC = () => {
                  <span className="text-xs text-stone-500 font-medium">Exibindo últimos lançamentos</span>
                  <button onClick={() => setSelectedStore(null)} className="px-4 py-2 bg-white border border-stone-200 hover:bg-stone-100 text-stone-700 font-bold rounded-lg text-sm transition-colors">Fechar</button>
               </div>
-           </div>
-        </div>
-      )}
-
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

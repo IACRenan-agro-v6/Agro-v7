@@ -22,13 +22,17 @@ import { UserRole } from '../types';
 interface RegistrationScreenProps {
   onBack: () => void;
   onRegister: (role: UserRole, data: any) => void;
+  onGoogleLogin: (role: UserRole) => void;
+  isLoading?: boolean;
 }
 
-const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onBack, onRegister }) => {
+const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onBack, onRegister, onGoogleLogin, isLoading: externalLoading }) => {
   const [step, setStep] = useState(1);
   const [role, setRole] = useState<UserRole>(UserRole.PRODUCER);
-  const [isLoading, setIsLoading] = useState(false);
+  const [internalLoading, setInternalLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const isLoading = externalLoading || internalLoading;
 
   // Form States
   const [formData, setFormData] = useState({
@@ -77,13 +81,8 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onBack, onRegis
       return;
     }
 
-    setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      setIsLoading(false);
-      onRegister(role, formData);
-    }, 2000);
+    setInternalLoading(true);
+    onRegister(role, formData);
   };
 
   const roles = [
@@ -388,6 +387,7 @@ const RegistrationScreen: React.FC<RegistrationScreenProps> = ({ onBack, onRegis
 
               <button 
                 type="button"
+                onClick={() => onGoogleLogin(role)}
                 className="w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all shadow-sm"
               >
                 <svg width="20" height="20" viewBox="0 0 24 24">

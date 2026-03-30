@@ -1,4 +1,4 @@
-import React from 'react';
+import { motion } from 'motion/react';
 import Markdown from 'react-markdown';
 import { Message, MessageRole } from '../types';
 import { Bot, User, Sprout, Volume2, Square, Loader2 } from 'lucide-react';
@@ -14,7 +14,12 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isPlaying, onToggleA
   const isAssistant = message.role === MessageRole.ASSISTANT;
 
   return (
-    <div className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}>
+    <motion.div 
+      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className={`flex w-full mb-6 ${isUser ? 'justify-end' : 'justify-start'}`}
+    >
       <div className={`flex max-w-[90%] md:max-w-[75%] gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
         
         {/* Avatar */}
@@ -100,7 +105,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isPlaying, onToggleA
           </div>
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 };
 

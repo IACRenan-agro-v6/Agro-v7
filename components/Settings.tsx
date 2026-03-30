@@ -433,6 +433,22 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, setIsDarkMode }) => {
                          </div>
                          <Save size={20} className="text-stone-300 group-hover:text-farm-500" />
                       </div>
+
+                      <div 
+                        onClick={() => {
+                          if (window.confirm("Isso irá limpar as mensagens e o histórico local. Seu perfil e dados no servidor não serão afetados. Continuar?")) {
+                            localStorage.clear();
+                            window.location.reload();
+                          }
+                        }}
+                        className="flex items-center justify-between p-4 border border-stone-200 rounded-xl hover:bg-red-50 transition-colors cursor-pointer group"
+                      >
+                         <div>
+                            <div className="font-bold text-stone-800 group-hover:text-red-600 transition-colors">Limpar Cache Local</div>
+                            <div className="text-xs text-stone-500">Remove mensagens e dados temporários salvos neste navegador.</div>
+                         </div>
+                         <Trash2 size={20} className="text-stone-300 group-hover:text-red-500" />
+                      </div>
                    </div>
                 </div>
                 

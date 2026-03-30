@@ -3,8 +3,10 @@ import { User, Lock, ArrowRight, Loader2, CheckCircle2, Tractor, ShoppingCart, H
 import { UserRole } from '../types';
 
 interface LoginScreenProps {
-  onLogin: (role: UserRole) => void;
+  onLogin: (role: UserRole, email?: string, password?: string) => void;
+  onGoogleLogin: (role: UserRole) => void;
   onGoToRegister: () => void;
+  isLoading?: boolean;
 }
 
 // Vector Logo Component for AgroBrasil (Large)
@@ -54,35 +56,42 @@ const AgroBrasilLogoForm = () => (
 );
 
 
-const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onGoToRegister }) => {
+const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onGoogleLogin, onGoToRegister, isLoading: externalLoading }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<UserRole>(UserRole.PRODUCER);
   const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [internalLoading, setInternalLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  const isLoading = externalLoading || internalLoading;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setIsLoading(true);
+    setInternalLoading(true);
 
-    // Simulate network delay for realism
-    setTimeout(() => {
-      // Validação: Aceita o usuário antigo (IAC/iac2010) OU o novo Master (iac/123)
-      const isLegacyUser = username === 'IAC' && password === 'iac2010';
-      const isMasterUser = username.toLowerCase() === 'iac' && password === '123';
+    // If it's the legacy/master user, we can still allow it or redirect to real auth
+    const isLegacyUser = username === 'IAC' && password === 'iac2010';
+    const isMasterUser = username.toLowerCase() === 'iac' && password === '123';
 
-      if (isLegacyUser || isMasterUser) {
+    if (isLegacyUser || isMasterUser) {
+      setTimeout(() => {
         setIsSuccess(true);
         setTimeout(() => {
             onLogin(role);
         }, 800);
+      }, 1200);
+    } else {
+      // Real authentication via Supabase (passed through onLogin)
+      if (username.includes('@')) {
+        onLogin(role, username, password);
+        setInternalLoading(false);
       } else {
-        setError('Usuário ou senha incorretos.');
-        setIsLoading(false);
+        setError('Por favor, insira um e-mail válido para login real ou use as credenciais de teste.');
+        setInternalLoading(false);
       }
-    }, 1200);
+    }
   };
 
   return (
@@ -257,6 +266,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, onGoToRegister }) =>
 
             <button 
               type="button"
+              onClick={() => onGoogleLogin(role)}
               className="w-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 py-3 rounded-xl font-bold flex items-center justify-center gap-3 hover:bg-stone-50 dark:hover:bg-stone-800 transition-all shadow-sm text-sm"
             >
               <svg width="18" height="18" viewBox="0 0 24 24">

@@ -6,8 +6,15 @@ import { cacheService } from './cacheService';
 // Initialize the client
 // API Key is injected by the environment.
 const getApiKey = () => {
-  const key = import.meta.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY || '';
-  console.log('API Key found:', !!key);
+  // @ts-ignore
+  const viteKey = import.meta.env.VITE_GEMINI_API_KEY;
+  // @ts-ignore
+  const processKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined;
+  
+  const key = viteKey || processKey || '';
+  if (!key) {
+    console.warn('AVISO: Chave da API Gemini não encontrada. Verifique as configurações.');
+  }
   return key;
 };
 
@@ -178,6 +185,7 @@ export const sendMessageToGemini = async (
 export const generateSpeechFromText = async (text: string): Promise<string | null> => {
   try {
     if (!text) return null;
+    console.log('Gerando áudio para o texto...', { textLength: text.length });
     
     const apiKey = getApiKey();
     if (!apiKey) return null;
@@ -199,10 +207,15 @@ export const generateSpeechFromText = async (text: string): Promise<string | nul
       },
     }));
 
-    return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || null;
+    const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (audioData) {
+      console.log('Áudio gerado com sucesso.');
+    } else {
+      console.warn('Nenhum dado de áudio retornado pela API.');
+    }
+    return audioData || null;
   } catch (error) {
-    console.warn("Erro ao gerar áudio:", error);
-    // Return null so the app continues without audio rather than crashing
+    console.error("Erro ao gerar áudio:", error);
     return null;
   }
 };
@@ -447,15 +460,25 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
     if (!apiKey) return null;
     const ai = new GoogleGenAI({ apiKey });
 
-    const prompt = `Você é o assistente IA do IAC Farm. Analise a seguinte entrada do usuário e identifique a intenção e extraia os dados.
-    Entrada: "${text}"
+    const prompt = `Você é o assistente IA do IAC Farm, um sistema inteligente para o agronegócio. 
+    Analise a entrada do usuário (que pode ser texto, imagem ou áudio) e identifique a intenção.
+    
+    Entrada de texto: "${text || '(Áudio ou imagem enviada)'}"
     
     Intenções possíveis:
     - ADD_PRODUCT: Usuário quer vender ou anunciar um produto (ex: "Quero vender 100kg de batata").
     - CHECK_ORDER: Usuário quer saber o status de um pedido ou entrega (ex: "Onde está meu pedido 123?").
     - FIELD_NOTE: Usuário quer registrar uma atividade na fazenda (ex: "Hoje adubei o talhão 2").
-    - PLANT_ID: Usuário enviou uma foto de planta para identificar (geralmente acompanhado de imagem).
+    - PLANT_ID: Usuário enviou uma foto de planta para identificar (MANDATÓRIO se houver imagem de planta).
     - GENERAL_CHAT: Conversa geral ou dúvida que não se encaixa nas anteriores.
+    
+    Se houver uma imagem de planta (PLANT_ID):
+    1. Identifique a espécie (nome comum e científico).
+    2. Avalie a saúde (presença de pragas, fungos, deficiência nutricional).
+    3. Informe se é tóxica para humanos ou animais.
+    4. Dê uma recomendação prática de tratamento "caipira" (ex: calda bordalesa, fumo, adubação específica).
+    
+    Se houver um áudio, transcreva-o mentalmente e responda à solicitação.
     
     Responda sempre no tom 'caipira moderno' do IAC Farm.`;
 
@@ -469,6 +492,7 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
       });
     }
 
+    console.log('Processando tarefa do usuário...', { textLength: text?.length, hasAttachment: !!attachment });
     const response = await withRetry(() => ai.models.generateContent({
       model: MODEL_NAME,
       contents: { parts: contents },
@@ -479,9 +503,12 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
     }));
 
     const jsonText = response.text;
+    console.log('Resposta da IA recebida:', jsonText);
     if (!jsonText) return null;
     
-    return JSON.parse(jsonText) as AITaskResponse;
+    const result = JSON.parse(jsonText) as AITaskResponse;
+    console.log('Intenção identificada:', result.intent, 'Confiança:', result.confidence);
+    return result;
 
   } catch (error) {
     console.error("Erro ao processar tarefa do usuário:", error);

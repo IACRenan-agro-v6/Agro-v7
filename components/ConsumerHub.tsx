@@ -34,10 +34,21 @@ interface ConsumerHubProps {
 }
 
 const ConsumerHub: React.FC<ConsumerHubProps> = ({ setView }) => {
-  const [activeTab, setActiveTab] = useState<'find' | 'nutrition'>('find');
-  const [products, setProducts] = useState<ConsumerProduct[]>([]);
+  const [activeTab, setActiveTab] = useState<'find' | 'nutrition'>(() => {
+    return (localStorage.getItem('agro_consumer_activeTab') as 'find' | 'nutrition') || 'find';
+  });
+  const [products, setProducts] = useState<ConsumerProduct[]>(() => {
+    const saved = localStorage.getItem('agro_consumer_products');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [feedback, setFeedback] = useState<{ message: string, type: 'success' | 'error' } | null>(null);
+
+  // Persist state
+  useEffect(() => {
+    localStorage.setItem('agro_consumer_activeTab', activeTab);
+    localStorage.setItem('agro_consumer_products', JSON.stringify(products));
+  }, [activeTab, products]);
 
   useEffect(() => {
     const fetchProducts = async () => {

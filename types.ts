@@ -46,7 +46,7 @@ export enum MessageRole {
 }
 
 export interface Attachment {
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'audio';
   url: string; // Blob URL for preview
   base64: string; // Base64 data for API
   mimeType: string;

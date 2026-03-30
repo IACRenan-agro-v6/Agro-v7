@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Message, MessageRole, Attachment, UserLocation, WeatherInfo, ViewMode, UserRole, UserProfile, AITaskIntent, OfflineTask } from './types';
 import { sendMessageToGemini, generateSpeechFromText, parseFieldNote, processUserTask } from './services/geminiService';
 import { fetchLocalWeather } from './services/weatherService';
@@ -54,11 +55,15 @@ Envie uma foto, um áudio ou escolha uma das opções abaixo!`,
   timestamp: new Date()
 };
 
+import ErrorBoundary from './components/ErrorBoundary';
+
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('agro_isAuthenticated') === 'true';
   });
-  const [isRegistering, setIsRegistering] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(() => {
+    return localStorage.getItem('agro_isRegistering') === 'true';
+  });
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     const saved = localStorage.getItem('agro_currentUser');
     return saved ? JSON.parse(saved) : null;
@@ -78,7 +83,8 @@ const App: React.FC = () => {
   useEffect(() => {
     const testConnection = async () => {
       try {
-        const { error } = await supabase.from('plants').select('id').limit(1);
+        console.log("Testando conexão com Supabase...");
+        const { data, error } = await supabase.from('plants').select('id').limit(1);
         if (error) {
           console.error("Erro na conexão com Supabase:", error.message);
           if (error.message.includes('Failed to fetch')) {
@@ -88,11 +94,10 @@ const App: React.FC = () => {
             console.error("DICA: A chave ANON do Supabase parece inválida.");
           }
         } else {
-          console.log("Conexão com Supabase estabelecida com sucesso.");
+          console.log("Conexão com Supabase estabelecida com sucesso. Dados recebidos:", data);
         }
       } catch (e) {
         console.error("Falha fatal ao conectar ao Supabase:", e);
-        console.error("Certifique-se de configurar VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY nas configurações do projeto.");
       }
     };
     testConnection();
@@ -101,15 +106,46 @@ const App: React.FC = () => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
   const [weatherInfo, setWeatherInfo] = useState<WeatherInfo | null>(null);
-  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const saved = localStorage.getItem('agro_messages');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((m: any) => ({ ...m, timestamp: new Date(m.timestamp) }));
+      } catch (e) {
+        return [INITIAL_MESSAGE];
+      }
+    }
+    return [INITIAL_MESSAGE];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isVoiceAssistantActive, setIsVoiceAssistantActive] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [audioStopper, setAudioStopper] = useState<(() => void) | null>(null);
   const [playingMessageId, setPlayingMessageId] = useState<string | null>(null);
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  useEffect(() => { if (view === 'chat') scrollToBottom(); }, [messages, view]);
+  const scrollToBottom = (force = false) => {
+    if (!messagesEndRef.current) return;
+    
+    const container = messagesEndRef.current.parentElement;
+    if (!container) return;
+
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 200;
+    
+    if (force || isNearBottom) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  useEffect(() => { 
+    if (view === 'chat' && messages.length > 0) {
+      const lastMessage = messages[messages.length - 1];
+      // Force scroll only for user messages. 
+      // Assistant messages will follow the 'isNearBottom' logic inside scrollToBottom.
+      const shouldForce = lastMessage.role === MessageRole.USER;
+      scrollToBottom(shouldForce); 
+    } 
+  }, [messages, view]);
 
   useEffect(() => {
     if (navigator.geolocation) {
@@ -244,10 +280,12 @@ const App: React.FC = () => {
     try {
       let responseText = '';
       
+      console.log('Iniciando processamento de mensagem...', { text, hasAttachment: !!attachment });
       // Use the new processUserTask for intelligent intent detection
       const aiTask = await processUserTask(cleanText, attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined);
       
       if (aiTask) {
+        console.log('Tarefa processada com sucesso:', aiTask.intent);
         responseText = aiTask.assistantMessage;
         
         // Handle specific intents with extra UI feedback or logic
@@ -265,6 +303,8 @@ const App: React.FC = () => {
             `⚖️ **Quantidade:** ${quantity || 'N/A'}\n` +
             `📍 **Local:** ${location || 'N/A'}\n\n` +
             `*${aiTask.assistantMessage}*`;
+        } else if (aiTask.intent === AITaskIntent.PLANT_ID && aiTask.confidence > 0.7) {
+          responseText = `🔍 **Análise de Planta:**\n\n${aiTask.assistantMessage}`;
         }
       } else {
         // Fallback to general chat if task processing fails
@@ -283,21 +323,28 @@ const App: React.FC = () => {
       }
 
       // Lógica de Salvamento Automático no Supabase para Diagnósticos com Imagem
-      if (attachment && attachment.type === 'image') {
+      if (attachment && attachment.type === 'image' && currentUser) {
+        console.log('Salvando diagnóstico no banco de dados...');
         const publicUrl = await dbService.uploadImage(attachment.base64, "plant_chat");
         if (publicUrl) {
-          await dbService.savePlantDiagnosis({
-            commonName: "Planta Identificada",
+          const saved = await dbService.savePlantDiagnosis({
+            commonName: aiTask?.intent === AITaskIntent.PLANT_ID ? (aiTask.extractedData?.productName || "Planta Identificada") : "Planta Identificada",
             scientificName: "Análise via Chat",
             date: new Date().toISOString(),
             imageUrl: publicUrl,
-            healthStatus: responseText.toLowerCase().includes('doença') ? 'diseased' : 'healthy',
-            diagnosisSummary: "Análise Automática Chat",
+            healthStatus: responseText.toLowerCase().includes('doença') || responseText.toLowerCase().includes('praga') ? 'diseased' : 'healthy',
+            diagnosisSummary: aiTask?.intent === AITaskIntent.PLANT_ID ? "Identificação de Planta" : "Análise Automática Chat",
             fullDiagnosis: responseText,
-            confidence: 85,
+            confidence: aiTask?.confidence ? Math.round(aiTask.confidence * 100) : 85,
             location: userLocation ? `${userLocation.lat.toFixed(4)}, ${userLocation.lng.toFixed(4)}` : 'Não informada'
-          }, currentUser?.id || 'anonymous');
+          }, currentUser.id);
+          
+          if (saved) {
+            console.log('Diagnóstico salvo com sucesso!');
+          }
         }
+      } else if (attachment && attachment.type === 'image' && !currentUser) {
+        console.warn('Usuário não autenticado. O diagnóstico não será salvo no histórico permanente.');
       }
     } catch (error) {
        if (!isSyncingTask) {
@@ -315,17 +362,24 @@ const App: React.FC = () => {
     }
   }, [isDarkMode]);
 
+  // Persist state with debounce to avoid heavy operations on every render
   useEffect(() => {
-    localStorage.setItem('agro_isAuthenticated', isAuthenticated.toString());
-    if (currentUser) {
-      localStorage.setItem('agro_currentUser', JSON.stringify(currentUser));
-    } else {
-      localStorage.removeItem('agro_currentUser');
-    }
-    localStorage.setItem('agro_userRole', userRole);
-    localStorage.setItem('agro_currentView', view);
-    localStorage.setItem('agro_isDarkMode', isDarkMode.toString());
-  }, [isAuthenticated, currentUser, userRole, view, isDarkMode]);
+    const timer = setTimeout(() => {
+      localStorage.setItem('agro_isAuthenticated', isAuthenticated.toString());
+      localStorage.setItem('agro_isRegistering', isRegistering.toString());
+      if (currentUser) {
+        localStorage.setItem('agro_currentUser', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('agro_currentUser');
+      }
+      localStorage.setItem('agro_userRole', userRole);
+      localStorage.setItem('agro_currentView', view);
+      localStorage.setItem('agro_isDarkMode', isDarkMode.toString());
+      localStorage.setItem('agro_messages', JSON.stringify(messages));
+    }, 500);
+    
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, isRegistering, currentUser, userRole, view, isDarkMode, messages]);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -345,20 +399,15 @@ const App: React.FC = () => {
     };
     checkSession();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setIsAuthenticated(true);
-      } else {
-        // Only clear if it wasn't a mock login (dev-user)
-        const savedUser = localStorage.getItem('agro_currentUser');
-        const isMock = savedUser && JSON.parse(savedUser).id === 'dev-user';
-        
-        if (!isMock) {
-          setIsAuthenticated(false);
-          setCurrentUser(null);
-          localStorage.removeItem('agro_isAuthenticated');
-          localStorage.removeItem('agro_currentUser');
-        }
+      } else if (event === 'SIGNED_OUT') {
+        setIsAuthenticated(false);
+        setCurrentUser(null);
+        localStorage.removeItem('agro_isAuthenticated');
+        localStorage.removeItem('agro_currentUser');
+        localStorage.removeItem('agro_messages');
       }
     });
 
@@ -370,22 +419,101 @@ const App: React.FC = () => {
     setIsAuthenticated(false);
     setCurrentUser(null);
     localStorage.removeItem('agro_isAuthenticated');
+    localStorage.removeItem('agro_isRegistering');
     localStorage.removeItem('agro_currentUser');
     localStorage.removeItem('agro_userRole');
     localStorage.removeItem('agro_currentView');
+    localStorage.removeItem('agro_messages');
+    localStorage.removeItem('agro_planner_searchTerm');
+    localStorage.removeItem('agro_planner_plan');
+    localStorage.removeItem('agro_planner_plantingDate');
+    localStorage.removeItem('agro_market_activeTab');
+    localStorage.removeItem('agro_market_searchTerm');
+    localStorage.removeItem('agro_market_quotes');
+    localStorage.removeItem('agro_market_offers');
+    localStorage.removeItem('agro_market_showAnalysis');
+    localStorage.removeItem('agro_market_showMap');
+    localStorage.removeItem('agro_market_filters');
+    localStorage.removeItem('agro_consumer_activeTab');
+    localStorage.removeItem('agro_consumer_products');
+    localStorage.removeItem('agro_dashboard_activeTab');
     setView('chat');
   };
 
-  const handleLogin = (role: UserRole) => {
+  const handleLogin = async (role: UserRole, email?: string, password?: string) => {
+    if (email && password) {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password
+        });
+        
+        if (error) throw error;
+        
+        if (data.user) {
+          setUserRole(role);
+          setIsAuthenticated(true);
+          
+          // Fetch profile from DB
+          const { data: profileData } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', data.user.id)
+            .single();
+            
+          if (profileData) {
+            const profile: UserProfile = {
+              id: profileData.id,
+              email: profileData.email,
+              role: profileData.role as UserRole,
+              fullName: profileData.full_name,
+              document: profileData.document,
+              phone: profileData.phone,
+              createdAt: profileData.created_at,
+              producerData: profileData.producer_data,
+              retailerData: profileData.retailer_data,
+              professionalData: profileData.professional_data,
+              consumerData: profileData.consumer_data
+            };
+            setCurrentUser(profile);
+            setUserRole(profile.role);
+          } else {
+            // Fallback if profile doesn't exist yet
+            const profile: UserProfile = {
+              id: data.user.id,
+              email: data.user.email || '',
+              role: role,
+              fullName: data.user.user_metadata?.full_name || 'Usuário',
+              document: '',
+              createdAt: new Date().toISOString()
+            };
+            setCurrentUser(profile);
+          }
+          
+          // Set initial view based on role
+          if (role === UserRole.PRODUCER) setView('dashboard');
+          else if (role === UserRole.RETAILER) setView('market');
+          else if (role === UserRole.CONSUMER) setView('consumer_hub');
+          else if (role === UserRole.PROFESSIONAL) setView('professional_hub');
+        }
+      } catch (error: any) {
+        console.error("Erro no login:", error.message);
+        alert("Erro no login: " + (error.message === 'Invalid login credentials' ? 'E-mail ou senha incorretos' : error.message));
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // Mock user for dev (if no email/pass provided)
     setUserRole(role);
     setIsAuthenticated(true);
-    // Set initial view based on role
     if (role === UserRole.PRODUCER) setView('dashboard');
     else if (role === UserRole.RETAILER) setView('market');
     else if (role === UserRole.CONSUMER) setView('consumer_hub');
     else if (role === UserRole.PROFESSIONAL) setView('professional_hub');
 
-    // Mock user for dev
     setCurrentUser({
       id: 'dev-user',
       email: 'dev@agrobrasil.com',
@@ -394,6 +522,22 @@ const App: React.FC = () => {
       document: '123.456.789-00',
       createdAt: new Date().toISOString()
     });
+  };
+
+  const handleGoogleLogin = async (role: UserRole) => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+      setUserRole(role);
+    } catch (error: any) {
+      console.error("Erro no login Google:", error.message);
+      alert("Erro no login Google: " + error.message);
+    }
   };
 
   const getHeaderTitle = () => {
@@ -422,55 +566,87 @@ const App: React.FC = () => {
       return (
         <RegistrationScreen 
           onBack={() => setIsRegistering(false)}
+          isLoading={isLoading}
           onRegister={async (role, data) => {
-            const profile: UserProfile = {
-              id: Date.now().toString(), // In real app, this would be from Auth
-              email: data.email,
-              role: role,
-              fullName: data.fullName,
-              document: data.document,
-              phone: data.phone,
-              createdAt: new Date().toISOString(),
-              producerData: role === UserRole.PRODUCER ? {
-                farmName: data.farmName,
-                totalArea: Number(data.totalArea),
-                mainCrops: data.mainCrops?.split(',') || [],
-                location: data.location
-              } : undefined,
-              retailerData: role === UserRole.RETAILER ? {
-                storeName: data.storeName,
-                cnpj: data.document,
-                address: data.address
-              } : undefined,
-              professionalData: role === UserRole.PROFESSIONAL ? {
-                specialty: data.specialty,
-                registryNumber: data.registryNumber
-              } : undefined
-            };
+            setIsLoading(true);
+            try {
+              // 1. Sign up in Supabase Auth
+              const { data: authData, error: authError } = await supabase.auth.signUp({
+                email: data.email,
+                password: data.password,
+                options: {
+                  data: {
+                    full_name: data.fullName,
+                    role: role
+                  }
+                }
+              });
 
-            const success = await dbService.saveUserProfile(profile);
-            if (success) {
-              setCurrentUser(profile);
-              setUserRole(role);
-              setIsAuthenticated(true);
-              setIsRegistering(false);
-            } else {
-              alert("Erro ao salvar perfil. Tente novamente.");
+              if (authError) throw authError;
+
+              if (authData.user) {
+                const profile: UserProfile = {
+                  id: authData.user.id,
+                  email: data.email,
+                  role: role,
+                  fullName: data.fullName,
+                  document: data.document,
+                  phone: data.phone,
+                  createdAt: new Date().toISOString(),
+                  producerData: role === UserRole.PRODUCER ? {
+                    farmName: data.farmName,
+                    totalArea: Number(data.totalArea),
+                    mainCrops: data.mainCrops?.split(',') || [],
+                    location: data.location
+                  } : undefined,
+                  retailerData: role === UserRole.RETAILER ? {
+                    storeName: data.storeName,
+                    cnpj: data.document,
+                    address: data.address
+                  } : undefined,
+                  professionalData: role === UserRole.PROFESSIONAL ? {
+                    specialty: data.specialty,
+                    registryNumber: data.registryNumber
+                  } : undefined
+                };
+
+                // 2. Save profile in user_profiles table
+                const success = await dbService.saveUserProfile(profile);
+                if (success) {
+                  setCurrentUser(profile);
+                  setUserRole(role);
+                  setIsAuthenticated(true);
+                  setIsRegistering(false);
+                } else {
+                  throw new Error("Erro ao salvar dados do perfil no banco de dados.");
+                }
+              }
+            } catch (error: any) {
+              console.error("Erro no cadastro:", error.message);
+              alert("Erro no cadastro: " + error.message);
+            } finally {
+              setIsLoading(false);
             }
           }}
+          onGoogleLogin={handleGoogleLogin}
         />
       );
     }
     return (
-      <LoginScreen 
-        onLogin={handleLogin} 
-        onGoToRegister={() => setIsRegistering(true)}
-      />
+      <ErrorBoundary>
+        <LoginScreen 
+          onLogin={handleLogin} 
+          onGoogleLogin={handleGoogleLogin}
+          onGoToRegister={() => setIsRegistering(true)}
+          isLoading={isLoading}
+        />
+      </ErrorBoundary>
     );
   }
 
   return (
-    <div className={`flex h-screen w-full relative overflow-hidden font-sans animate-fade-in ${isDarkMode ? 'bg-stone-950 text-stone-100' : 'bg-white text-stone-900'}`}>
+    <ErrorBoundary>
+      <div className={`flex h-screen w-full relative overflow-hidden font-sans animate-fade-in ${isDarkMode ? 'bg-stone-950 text-stone-100' : 'bg-white text-stone-900'}`}>
       
       {/* Offline Banner */}
       {!isOnline && (
@@ -509,88 +685,97 @@ const App: React.FC = () => {
           <div className="w-6" />
         </div>
 
-        {view === 'chat' && (
-          <>
-            <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth bg-white">
-              <div className="max-w-4xl mx-auto min-h-full flex flex-col pb-4">
-                <div className="bg-gradient-to-r from-farm-600 to-farm-500 rounded-3xl p-6 md:p-8 text-white mb-6 flex justify-between items-center shadow-lg shadow-farm-600/20">
-                   <div>
-                      <h1 className="text-2xl md:text-3xl font-black mb-1 tracking-tight">IAC Farm</h1>
-                      <p className="text-farm-100 text-sm font-medium opacity-90">Sua lavoura na palma da mão</p>
-                   </div>
-                   <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"><Bot size={32} className="text-white" /></div>
-                </div>
-
-                <div className="mb-6 flex items-center justify-between bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                  <div className="flex items-center gap-3">
-                    <div className={`w-3 h-3 rounded-full ${isVoiceAssistantActive ? 'bg-green-500 animate-pulse' : 'bg-stone-300'}`} />
-                    <div>
-                      <h4 className="font-bold text-stone-800 text-sm">Assistente de Voz</h4>
-                      <p className="text-xs text-stone-500">A IA falará as respostas automaticamente</p>
-                    </div>
+        <AnimatePresence mode="wait">
+          {view === 'chat' && (
+            <motion.div 
+              key="chat"
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.2 }}
+              className="flex flex-col h-full overflow-hidden"
+            >
+              <div className="flex-1 overflow-y-auto p-4 md:p-8 scroll-smooth bg-white">
+                <div className="max-w-4xl mx-auto min-h-full flex flex-col pb-4">
+                  <div className="bg-gradient-to-r from-farm-600 to-farm-500 rounded-3xl p-6 md:p-8 text-white mb-6 flex justify-between items-center shadow-lg shadow-farm-600/20">
+                     <div>
+                        <h1 className="text-2xl md:text-3xl font-black mb-1 tracking-tight">IAC Farm</h1>
+                        <p className="text-farm-100 text-sm font-medium opacity-90">Sua lavoura na palma da mão</p>
+                     </div>
+                     <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm"><Bot size={32} className="text-white" /></div>
                   </div>
-                  <button 
-                    onClick={() => setIsVoiceAssistantActive(!isVoiceAssistantActive)}
-                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${isVoiceAssistantActive ? 'bg-farm-600 text-white shadow-md' : 'bg-white border border-stone-200 text-stone-600'}`}
-                  >
-                    {isVoiceAssistantActive ? 'ATIVADO' : 'DESATIVADO'}
-                  </button>
+
+                  <div className="mb-6 flex items-center justify-between bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-3 rounded-full ${isVoiceAssistantActive ? 'bg-green-500 animate-pulse' : 'bg-stone-300'}`} />
+                      <div>
+                        <h4 className="font-bold text-stone-800 text-sm">Assistente de Voz</h4>
+                        <p className="text-xs text-stone-500">A IA falará as respostas automaticamente</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => setIsVoiceAssistantActive(!isVoiceAssistantActive)}
+                      className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${isVoiceAssistantActive ? 'bg-farm-600 text-white shadow-md' : 'bg-white border border-stone-200 text-stone-600'}`}
+                    >
+                      {isVoiceAssistantActive ? 'ATIVADO' : 'DESATIVADO'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                     <button onClick={() => setView('planner')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-emerald-100 transition-all group cursor-pointer">
+                        <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Flower2 size={26} /></div>
+                        <h3 className="font-bold text-stone-800 text-lg">Planejar Safra</h3>
+                        <p className="text-xs text-stone-500 font-medium">IA para produtores</p>
+                     </button>
+                     <button onClick={() => setView('market')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-orange-100 transition-all group cursor-pointer">
+                        <div className="w-14 h-14 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Store size={26} /></div>
+                        <h3 className="font-bold text-stone-800 text-lg">Mercado CEASA</h3>
+                        <p className="text-xs text-stone-500 font-medium">Previsões para varejo</p>
+                     </button>
+                     <button onClick={() => setView('consumer_hub')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-rose-100 transition-all group cursor-pointer">
+                        <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><HeartPulse size={26} /></div>
+                        <h3 className="font-bold text-stone-800 text-lg">Saúde & Nutrição</h3>
+                        <p className="text-xs text-stone-500 font-medium">IA para o consumidor</p>
+                     </button>
+                  </div>
+                  {messages.map((msg) => (
+                    <ChatMessage key={msg.id} message={msg} isPlaying={playingMessageId === msg.id} onToggleAudio={handleToggleAudio} />
+                  ))}
+                  <div ref={messagesEndRef} />
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-                   <button onClick={() => setView('planner')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-emerald-100 transition-all group cursor-pointer">
-                      <div className="w-14 h-14 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Flower2 size={26} /></div>
-                      <h3 className="font-bold text-stone-800 text-lg">Planejar Safra</h3>
-                      <p className="text-xs text-stone-500 font-medium">IA para produtores</p>
-                   </button>
-                   <button onClick={() => setView('market')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-orange-100 transition-all group cursor-pointer">
-                      <div className="w-14 h-14 bg-orange-50 text-orange-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><Store size={26} /></div>
-                      <h3 className="font-bold text-stone-800 text-lg">Mercado CEASA</h3>
-                      <p className="text-xs text-stone-500 font-medium">Previsões para varejo</p>
-                   </button>
-                   <button onClick={() => setView('consumer_hub')} className="bg-white border border-stone-100 shadow-sm rounded-2xl p-6 flex flex-col items-center text-center hover:shadow-md hover:border-rose-100 transition-all group cursor-pointer">
-                      <div className="w-14 h-14 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mb-3 group-hover:scale-110 transition-transform"><HeartPulse size={26} /></div>
-                      <h3 className="font-bold text-stone-800 text-lg">Saúde & Nutrição</h3>
-                      <p className="text-xs text-stone-500 font-medium">IA para o consumidor</p>
+              </div>
+              {audioStopper && (
+                <div className="absolute bottom-28 right-6 z-30 animate-fade-in">
+                   <button onClick={stopAudio} className="flex items-center gap-2 bg-farm-600 text-white pl-3 pr-4 py-3 rounded-full shadow-xl hover:bg-red-600 transition-colors border border-white/20">
+                      <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span></span>
+                      <span className="text-sm font-bold">Ouvindo...</span>
+                      <div className="h-4 w-[1px] bg-white/20 mx-1"></div>
+                      <Square size={14} fill="currentColor" />
                    </button>
                 </div>
-                {messages.map((msg) => (
-                  <ChatMessage key={msg.id} message={msg} isPlaying={playingMessageId === msg.id} onToggleAudio={handleToggleAudio} />
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
-            </div>
-            {audioStopper && (
-              <div className="absolute bottom-28 right-6 z-30 animate-fade-in">
-                 <button onClick={stopAudio} className="flex items-center gap-2 bg-farm-600 text-white pl-3 pr-4 py-3 rounded-full shadow-xl hover:bg-red-600 transition-colors border border-white/20">
-                    <span className="relative flex h-3 w-3"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span><span className="relative inline-flex rounded-full h-3 w-3 bg-white"></span></span>
-                    <span className="text-sm font-bold">Ouvindo...</span>
-                    <div className="h-4 w-[1px] bg-white/20 mx-1"></div>
-                    <Square size={14} fill="currentColor" />
-                 </button>
-              </div>
-            )}
-            <InputArea onSendMessage={handleSendMessage} isLoading={isLoading} />
-          </>
-        )}
+              )}
+              <InputArea onSendMessage={handleSendMessage} isLoading={isLoading} />
+            </motion.div>
+          )}
 
-        {view === 'planner' && <CropPlanner userLocation={userLocation} setView={setView} />}
-        {view === 'cameras' && <CameraGrid />}
-        {view === 'automations' && <AutomationControl />}
-        {view === 'dashboard' && <FarmDashboard />}
-        {view === 'emater' && <EmaterChannel />}
-        {view === 'presentation' && <SystemPresentation />}
-        {view === 'market' && <MarketView currentUser={currentUser} setView={setView} />}
-        {view === 'logistics' && <LogisticsView />}
-        {view === 'pos' && <RetailPOSView />}
-        {view === 'retail_insights' && <RetailerInsights setView={setView} />}
-        {view === 'consumer_hub' && <ConsumerHub setView={setView} />}
-        {view === 'professional_hub' && <ProfessionalHub setView={setView} />}
-        {view === 'settings' && <Settings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />}
-        {view === 'registry' && <PlantRegistry currentUser={currentUser} />}
-
+          {view === 'planner' && <motion.div key="planner" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><CropPlanner userLocation={userLocation} setView={setView} /></motion.div>}
+          {view === 'cameras' && <motion.div key="cameras" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><CameraGrid /></motion.div>}
+          {view === 'automations' && <motion.div key="automations" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><AutomationControl /></motion.div>}
+          {view === 'dashboard' && <motion.div key="dashboard" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><FarmDashboard /></motion.div>}
+          {view === 'emater' && <motion.div key="emater" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><EmaterChannel /></motion.div>}
+          {view === 'presentation' && <motion.div key="presentation" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><SystemPresentation /></motion.div>}
+          {view === 'market' && <motion.div key="market" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><MarketView currentUser={currentUser} setView={setView} /></motion.div>}
+          {view === 'logistics' && <motion.div key="logistics" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><LogisticsView /></motion.div>}
+          {view === 'pos' && <motion.div key="pos" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><RetailPOSView /></motion.div>}
+          {view === 'retail_insights' && <motion.div key="retail_insights" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><RetailerInsights setView={setView} /></motion.div>}
+          {view === 'consumer_hub' && <motion.div key="consumer_hub" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><ConsumerHub setView={setView} /></motion.div>}
+          {view === 'professional_hub' && <motion.div key="professional_hub" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><ProfessionalHub setView={setView} /></motion.div>}
+          {view === 'settings' && <motion.div key="settings" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><Settings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} /></motion.div>}
+          {view === 'registry' && <motion.div key="registry" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full"><PlantRegistry currentUser={currentUser} /></motion.div>}
+        </AnimatePresence>
       </main>
     </div>
+    </ErrorBoundary>
   );
 };
 

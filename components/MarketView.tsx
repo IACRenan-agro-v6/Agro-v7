@@ -52,21 +52,49 @@ const HISTORICAL_DATA = [
 ];
 
 const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
-  const [activeTab, setActiveTab] = useState<'quotes' | 'marketplace'>('quotes');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [quotes, setQuotes] = useState<MarketQuote[]>([]);
-  const [offers, setOffers] = useState<MarketOffer[]>([]);
+  const [activeTab, setActiveTab] = useState<'quotes' | 'marketplace'>(() => {
+    return (localStorage.getItem('agro_market_activeTab') as 'quotes' | 'marketplace') || 'quotes';
+  });
+  const [searchTerm, setSearchTerm] = useState(() => {
+    return localStorage.getItem('agro_market_searchTerm') || '';
+  });
+  const [quotes, setQuotes] = useState<MarketQuote[]>(() => {
+    const saved = localStorage.getItem('agro_market_quotes');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [offers, setOffers] = useState<MarketOffer[]>(() => {
+    const saved = localStorage.getItem('agro_market_offers');
+    return saved ? JSON.parse(saved) : [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isAddingOffer, setIsAddingOffer] = useState(false);
-  const [showAnalysis, setShowAnalysis] = useState(false);
-  const [showMap, setShowMap] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(() => {
+    return localStorage.getItem('agro_market_showAnalysis') === 'true';
+  });
+  const [showMap, setShowMap] = useState(() => {
+    return localStorage.getItem('agro_market_showMap') === 'true';
+  });
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    type: 'all', // all, organic, conventional
-    status: 'all', // all, available, sold
-    maxDistance: 100 // km
+  const [filters, setFilters] = useState(() => {
+    const saved = localStorage.getItem('agro_market_filters');
+    return saved ? JSON.parse(saved) : {
+      type: 'all', // all, organic, conventional
+      status: 'all', // all, available, sold
+      maxDistance: 100 // km
+    };
   });
+
+  // Persist state
+  useEffect(() => {
+    localStorage.setItem('agro_market_activeTab', activeTab);
+    localStorage.setItem('agro_market_searchTerm', searchTerm);
+    localStorage.setItem('agro_market_quotes', JSON.stringify(quotes));
+    localStorage.setItem('agro_market_offers', JSON.stringify(offers));
+    localStorage.setItem('agro_market_showAnalysis', showAnalysis.toString());
+    localStorage.setItem('agro_market_showMap', showMap.toString());
+    localStorage.setItem('agro_market_filters', JSON.stringify(filters));
+  }, [activeTab, searchTerm, quotes, offers, showAnalysis, showMap, filters]);
 
   // Get user location for map
   useEffect(() => {

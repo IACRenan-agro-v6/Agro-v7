@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Calendar, MapPin, AlertTriangle, CheckCircle2, ChevronRight, Flower2, Sprout, Bug, Activity, X, Loader2 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Search, Filter, Calendar, MapPin, AlertTriangle, CheckCircle2, ChevronRight, Flower2, Sprout, Bug, Activity, X, Loader2, RefreshCw } from 'lucide-react';
 import { IdentifiedPlant, UserProfile } from '../types';
 import { dbService } from '../services/dbService';
 
@@ -69,9 +70,19 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
         </div>
 
         {/* Controls */}
-        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
+        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto items-center">
+           {/* Refresh Button */}
+           <button 
+             onClick={loadPlants}
+             disabled={loading}
+             className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-500 hover:text-farm-600 hover:border-farm-200 transition-all shadow-sm"
+             title="Atualizar Histórico"
+           >
+             <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+           </button>
+
            {/* Search */}
-           <div className="relative">
+           <div className="relative flex-1 md:flex-none">
               <input 
                 type="text" 
                 placeholder="Buscar planta..." 
@@ -111,12 +122,18 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
           <p className="text-stone-500 font-medium">Sincronizando com Supabase...</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 animate-slide-up">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+        >
           {filteredPlants.map((plant) => (
-            <div 
+            <motion.div 
+              layout
               key={plant.id}
               onClick={() => setSelectedPlant(plant)}
-              className="bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group overflow-hidden"
+              whileHover={{ y: -5 }}
+              className="bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden"
             >
                 <div className="relative h-56 overflow-hidden">
                   <img src={plant.imageUrl} alt={plant.commonName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
@@ -147,9 +164,9 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
                       <span className="flex items-center gap-1 group-hover:text-farm-600 transition-colors">Ver Detalhes <ChevronRight size={14} /></span>
                   </div>
                 </div>
-            </div>
+            </motion.div>
           ))}
-        </div>
+        </motion.div>
       )}
 
       {!loading && filteredPlants.length === 0 && (
@@ -160,10 +177,20 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
          </div>
       )}
 
-      {/* Detail Modal */}
-      {selectedPlant && (
-         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden animate-slide-up flex flex-col md:flex-row h-[90vh] md:h-auto">
+      <AnimatePresence>
+        {selectedPlant && (
+           <motion.div 
+             initial={{ opacity: 0 }}
+             animate={{ opacity: 1 }}
+             exit={{ opacity: 0 }}
+             className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-sm flex items-center justify-center p-4"
+           >
+              <motion.div 
+                initial={{ scale: 0.9, opacity: 0, y: 20 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.9, opacity: 0, y: 20 }}
+                className="bg-white rounded-3xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col md:flex-row h-[90vh] md:h-auto"
+              >
                <div className="w-full md:w-2/5 relative h-64 md:h-auto bg-stone-100">
                   <img src={selectedPlant.imageUrl} alt={selectedPlant.commonName} className="w-full h-full object-cover" />
                   <div className="absolute top-4 left-4">
@@ -194,9 +221,10 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
                      </div>
                   </div>
                </div>
-            </div>
-         </div>
-      )}
+              </motion.div>
+           </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
