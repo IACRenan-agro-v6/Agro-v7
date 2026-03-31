@@ -5,10 +5,6 @@ import { createClient } from '@supabase/supabase-js';
 const rawUrl = import.meta.env.VITE_SUPABASE_URL;
 const rawKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Fallbacks seguros
-const DEFAULT_URL = 'https://hoepznsyzdlrzzlrlurp.supabase.co';
-const DEFAULT_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhvZXB6bnN5emRscnp6bHJsdXJwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxNzE3MzgsImV4cCI6MjA3ODc0NzczOH0.0W-dZiHbd4PIQcB8FDZIBgdNVlAtKPIBaUvbSdCVlNc';
-
 // Validação da URL
 const isValidUrl = (url: string | undefined): url is string => {
     if (!url) return false;
@@ -20,12 +16,12 @@ const isValidUrl = (url: string | undefined): url is string => {
     }
 };
 
-const SUPABASE_URL = isValidUrl(rawUrl) ? rawUrl : DEFAULT_URL;
-const SUPABASE_KEY = (rawKey && rawKey.length > 10) ? rawKey : DEFAULT_KEY;
+const SUPABASE_URL = isValidUrl(rawUrl) ? rawUrl : '';
+const SUPABASE_KEY = (rawKey && rawKey.length > 10) ? rawKey : '';
 
-if (!isValidUrl(rawUrl)) {
-    console.info("Supabase URL não configurada ou inválida nas variáveis de ambiente. Usando fallback.");
+if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.error("ERRO DE CONFIGURAÇÃO: Supabase URL ou Anon Key não configuradas nas variáveis de ambiente (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).");
 }
 
 // Inicializa o cliente
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+export const supabase = createClient(SUPABASE_URL || 'https://placeholder.supabase.co', SUPABASE_KEY || 'placeholder');

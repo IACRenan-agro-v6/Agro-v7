@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Lightbulb, Droplets, Zap, Lock, Unlock, RefreshCw, Clock, ShieldAlert, UserCog, X, Power, CloudRain, Waves } from 'lucide-react';
 import { AUTOMATION_DEVICES } from '../data/mockData';
+import { toast } from 'sonner';
 
 type DeviceType = 'light' | 'gate' | 'pump' | 'irrigation';
 type UserRole = 'admin' | 'operator';
@@ -38,7 +39,9 @@ const AutomationControl: React.FC = () => {
   const toggleDevice = (id: string) => {
     const device = devices.find(d => d.id === id);
     if (device?.restricted && currentUserRole !== 'admin') {
-      alert("Acesso Negado: Apenas Administradores podem operar este equipamento.");
+      toast.error("Acesso Negado", {
+        description: "Apenas Administradores podem operar este equipamento."
+      });
       return;
     }
 

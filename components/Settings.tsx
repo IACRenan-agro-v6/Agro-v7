@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { 
   User, 
   MapPin, 
@@ -53,7 +54,7 @@ const Settings: React.FC<SettingsProps> = ({ isDarkMode, setIsDarkMode }) => {
     // Simulate API Call
     setTimeout(() => {
       setIsSaving(false);
-      alert("Configurações salvas com sucesso!");
+      toast.success("Configurações salvas com sucesso!");
     }, 1500);
   };
 

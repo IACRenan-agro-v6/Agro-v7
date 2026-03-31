@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { toast } from 'sonner';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -176,8 +177,9 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
       // Refresh offers
       const data = await dbService.getMarketOffers();
       setOffers(data);
+      toast.success("Oferta publicada com sucesso! Bons negócios.");
     } else {
-      alert("Erro ao salvar oferta.");
+      toast.error("Não conseguimos salvar sua oferta. Tente de novo em instantes.");
     }
   };
 

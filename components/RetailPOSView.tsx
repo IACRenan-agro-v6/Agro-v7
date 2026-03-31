@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { 
   ShoppingCart, 
   Search, 
@@ -78,7 +79,11 @@ const RetailPOSView: React.FC = () => {
     setTimeout(() => {
       setIsProcessing(false);
       setCart([]);
-      alert(emitNFCe ? "Venda finalizada! NFC-e emitida com sucesso." : "Venda finalizada!");
+      if (emitNFCe) {
+        toast.success("Venda finalizada! NFC-e emitida com sucesso.");
+      } else {
+        toast.success("Venda finalizada com sucesso!");
+      }
     }, 1500);
   };
 

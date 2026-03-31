@@ -1,4 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { toast } from 'sonner';
 import { Send, Mic, Image as ImageIcon, Video, X, Loader2, ScanEye, Camera, ClipboardList, StopCircle, Trash2 } from 'lucide-react';
 import { Attachment } from '../types';
 import { fileToBase64, compressImage } from '../utils/fileUtils';
@@ -77,7 +78,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       const msg = err.name === 'NotAllowedError' 
         ? "Permissão de microfone negada. Por favor, ative nas configurações do navegador." 
         : "Não foi possível acessar o microfone. Verifique as permissões.";
-      alert(msg);
+      toast.error(msg);
     }
   };
 
@@ -146,7 +147,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       }
     } catch (err) {
       console.error('Erro ao capturar da câmera:', err);
-      alert('Ocorreu um erro ao processar a imagem da câmera.');
+      toast.error('Ocorreu um erro ao processar a imagem da câmera. Tente de novo.');
     } finally {
       if (cameraInputRef.current) cameraInputRef.current.value = '';
     }
@@ -172,7 +173,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       }
     } catch (err) {
       console.error('Erro ao identificar planta:', err);
-      alert('Ocorreu um erro ao processar a identificação da planta.');
+      toast.error('Ocorreu um erro ao processar a identificação da planta. Tente de novo.');
     } finally {
       if (plantIdInputRef.current) plantIdInputRef.current.value = '';
     }
@@ -180,7 +181,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
 
   const handleFieldNote = () => {
     if (!inputText.trim()) {
-      alert("Por favor, fale ou digite a atividade primeiro.");
+      toast.warning("Por favor, fale ou digite a atividade primeiro.");
       return;
     }
     onSendMessage(`[FIELD_NOTE]: ${inputText}`);

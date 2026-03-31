@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { toast } from 'sonner';
 import { 
   Truck, 
   MapPin, 
@@ -30,6 +31,9 @@ const LogisticsView: React.FC = () => {
     setTimeout(() => {
       setIsOptimizing(false);
       setOptimized(true);
+      toast.success("Rotas otimizadas com sucesso!", {
+        description: "Economia de 35% no frete garantida."
+      });
     }, 2500);
   };
 

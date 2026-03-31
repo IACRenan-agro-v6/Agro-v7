@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { NavLink } from 'react-router-dom';
 import { 
   Bot, 
   LayoutDashboard, 
@@ -22,13 +23,12 @@ import {
   LineChart,
   HeartPulse,
   Users,
-  LogOut
+  LogOut,
+  Flower2
 } from 'lucide-react';
 import { WeatherInfo, ViewMode, UserRole } from '../types';
 
 interface SidebarProps {
-  view: ViewMode;
-  setView: (view: ViewMode) => void;
   isSidebarOpen: boolean;
   setIsSidebarOpen: (isOpen: boolean) => void;
   isSidebarCollapsed: boolean;
@@ -56,6 +56,7 @@ const PremiumIcon = ({ icon: Icon, mode, isActive }: { icon: any, mode: ViewMode
       case 'retail_insights': return 'from-indigo-500 to-blue-700 shadow-indigo-500/40';
       case 'consumer_hub': return 'from-rose-400 to-pink-600 shadow-rose-500/40';
       case 'settings': return 'from-stone-600 to-stone-900 shadow-stone-500/40';
+      case 'registry': return 'from-green-400 to-emerald-600 shadow-emerald-500/40';
       default: return 'from-gray-400 to-gray-600';
     }
   };
@@ -107,36 +108,42 @@ const AgroBrasilLogo = ({ collapsed }: { collapsed?: boolean }) => (
 );
 
 const Sidebar: React.FC<SidebarProps> = ({ 
-  view, setView, isSidebarOpen, setIsSidebarOpen, 
+  isSidebarOpen, setIsSidebarOpen, 
   isSidebarCollapsed, setIsSidebarCollapsed, userLocation, weatherInfo, userRole, onLogout
 }) => {
 
   const NavItem = ({ mode, icon: Icon, label }: { mode: ViewMode, icon: any, label: string }) => {
-    const isActive = view === mode;
+    let path = mode as string;
+    if (mode === 'retail_insights') path = 'retail-insights';
+    if (mode === 'consumer_hub') path = 'consumer-hub';
+    if (mode === 'professional_hub') path = 'professional-hub';
+
     return (
-      <button 
-        onClick={() => {
-          setView(mode);
-          setIsSidebarOpen(false);
-        }}
-        className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all font-medium group ${
+      <NavLink 
+        to={`/${path}`}
+        onClick={() => setIsSidebarOpen(false)}
+        className={({ isActive }) => `w-full flex items-center gap-4 p-3 rounded-2xl transition-all font-medium group ${
           isActive
           ? 'bg-white dark:bg-stone-800 shadow-sm border border-stone-100 dark:border-stone-700' 
           : 'hover:bg-white/50 dark:hover:bg-stone-800/50 border border-transparent hover:border-stone-100 dark:hover:border-stone-700'
         } ${isSidebarCollapsed ? 'justify-center' : ''}`}
         title={isSidebarCollapsed ? label : undefined}
       >
-        <PremiumIcon icon={Icon} mode={mode} isActive={isActive} />
-        
-        {!isSidebarCollapsed && (
+        {({ isActive }) => (
           <>
-            <span className={`text-sm tracking-wide transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${isActive ? 'text-stone-900 font-bold' : 'text-stone-500 group-hover:text-stone-800'}`}>
-              {label}
-            </span>
-            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-farm-500 flex-shrink-0"></div>}
+            <PremiumIcon icon={Icon} mode={mode as ViewMode} isActive={isActive} />
+            
+            {!isSidebarCollapsed && (
+              <>
+                <span className={`text-sm tracking-wide transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${isActive ? 'text-stone-900 font-bold' : 'text-stone-500 group-hover:text-stone-800'}`}>
+                  {label}
+                </span>
+                {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-farm-500 flex-shrink-0"></div>}
+              </>
+            )}
           </>
         )}
-      </button>
+      </NavLink>
     );
   };
 
@@ -173,6 +180,7 @@ const Sidebar: React.FC<SidebarProps> = ({
           {(userRole === UserRole.PRODUCER || userRole === UserRole.ADMIN) && (
             <>
               <NavItem mode="dashboard" icon={LayoutDashboard} label="Minha Fazenda" />
+              <NavItem mode="registry" icon={Flower2} label="Minhas Plantas" />
               <NavItem mode="planner" icon={ClipboardList} label="Planejamento" />
               <NavItem mode="cameras" icon={ShieldCheck} label="Segurança" />
               <NavItem mode="automations" icon={Zap} label="Acionamentos" />

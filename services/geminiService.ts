@@ -6,14 +6,16 @@ import { cacheService } from './cacheService';
 // Initialize the client
 // API Key is injected by the environment.
 const getApiKey = () => {
-  // @ts-ignore
+  // Standard Vite environment variable
   const viteKey = import.meta.env.VITE_GEMINI_API_KEY;
+  
+  // Fallback for environments that inject GEMINI_API_KEY directly (like AI Studio)
   // @ts-ignore
   const processKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined;
   
   const key = viteKey || processKey || '';
   if (!key) {
-    console.warn('AVISO: Chave da API Gemini não encontrada. Verifique as configurações.');
+    console.warn('AVISO: Chave da API Gemini não encontrada. Verifique as configurações (VITE_GEMINI_API_KEY).');
   }
   return key;
 };

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { Search, Calendar, Droplets, Sprout, Bug, Shovel, Clock, CheckCircle2, ArrowRight, BarChart3, Share2, MapPin, AlertTriangle, Thermometer, Loader2 } from 'lucide-react';
 import { generateCropPlan } from '../services/geminiService';
 import { dbService } from '../services/dbService';
@@ -80,7 +81,7 @@ const CropPlanner: React.FC<CropPlannerProps> = ({ userLocation, setView }) => {
       }).catch((err) => console.log('Compartilhamento cancelado', err));
     } else {
       navigator.clipboard.writeText(shareText);
-      alert('Resumo copiado para a área de transferência!');
+      toast.success('Resumo copiado para a área de transferência!');
     }
   };
 

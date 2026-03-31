@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { toast } from 'sonner';
 import { Newspaper, FlaskConical, Phone, Mail, ChevronRight, Download, ExternalLink, Search, Calendar, MapPin, Send, X, Clock, User, Share2, Filter, ChevronDown, Loader2 } from 'lucide-react';
 import { NEWS_DATA, RESEARCH_DATA } from '../data/mockData';
 
@@ -36,7 +37,7 @@ const EmaterChannel: React.FC = () => {
         url: window.location.href,
       }).catch(console.error);
     } else {
-      alert("Link copiado para a área de transferência!");
+      toast.success("Link copiado para a área de transferência!");
     }
   };
 

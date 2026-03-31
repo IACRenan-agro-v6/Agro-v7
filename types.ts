@@ -134,7 +134,7 @@ export interface IdentifiedPlant {
   location?: string; // e.g., "Talhão 03"
 }
 
-export type ViewMode = 'chat' | 'planner' | 'cameras' | 'automations' | 'dashboard' | 'emater' | 'presentation' | 'settings' | 'market' | 'logistics' | 'pos' | 'retail_insights' | 'consumer_hub' | 'professional_hub';
+export type ViewMode = 'chat' | 'planner' | 'cameras' | 'automations' | 'dashboard' | 'emater' | 'presentation' | 'settings' | 'market' | 'logistics' | 'pos' | 'retail_insights' | 'consumer_hub' | 'professional_hub' | 'registry';
 
 export interface MarketQuote {
   product: string;
