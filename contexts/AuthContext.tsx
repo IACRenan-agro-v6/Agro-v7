@@ -3,6 +3,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '../services/supabaseClient';
 import { dbService } from '../services/dbService';
 import { UserRole, UserProfile } from '../types';
+import { toast } from 'sonner';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -197,17 +198,31 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const googleLogin = async (role: UserRole) => {
-    // Save role to localStorage immediately because the browser will redirect
-    localStorage.setItem('agro_userRole', role);
-    
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin
+    try {
+      // Save role to localStorage immediately because the browser will redirect
+      localStorage.setItem('agro_userRole', role);
+      
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
+      if (error) throw error;
+      setUserRole(role);
+    } catch (error: any) {
+      console.error('Erro no login com Google:', error);
+      
+      let message = 'Ocorreu um erro ao tentar entrar com o Google.';
+      if (error.message?.includes('provider is not enabled')) {
+        message = 'O login com Google ainda não foi ativado no painel do Supabase. Por favor, use e-mail e senha por enquanto.';
+      } else if (error.message?.includes('identity_provider_not_found')) {
+        message = 'Configuração do Google no Supabase está incompleta. Verifique o Client ID e Secret.';
       }
-    });
-    if (error) throw error;
-    setUserRole(role);
+      
+      toast.error(message);
+      throw error;
+    }
   };
 
   const logout = async () => {

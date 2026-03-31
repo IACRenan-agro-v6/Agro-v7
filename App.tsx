@@ -96,10 +96,14 @@ const App: React.FC = () => {
     try {
       await googleLogin(role);
       // Note: navigate might not run if signInWithOAuth redirects the browser
+      // But if it returns (e.g. error or already logged in), we navigate
       navigate(getLandingPage(role));
     } catch (error: any) {
       console.error("Erro no login Google:", error.message);
-      toast.error("Houve um problema ao entrar com o Google. Tente de novo, companheiro.");
+      // The toast is already handled in AuthContext.tsx for specific Supabase errors
+      if (!error.message?.includes('provider is not enabled') && !error.message?.includes('identity_provider_not_found')) {
+        toast.error("Houve um problema ao entrar com o Google. Tente de novo, companheiro.");
+      }
     }
   };
 

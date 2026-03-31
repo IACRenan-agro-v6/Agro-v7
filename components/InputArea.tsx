@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Send, Mic, Image as ImageIcon, Video, X, Loader2, ScanEye, Camera, ClipboardList, StopCircle, Trash2 } from 'lucide-react';
 import { Attachment } from '../types';
 import { fileToBase64, compressImage } from '../utils/fileUtils';
+import CameraModal from './CameraModal';
 
 interface InputAreaProps {
   onSendMessage: (text: string, attachment?: Attachment) => void;
@@ -14,6 +15,8 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
   const [attachment, setAttachment] = useState<Attachment | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
+  const [cameraMode, setCameraMode] = useState<'general' | 'plant'>('general');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -132,7 +135,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
   const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (e.target.files && e.target.files[0]) {
-        console.log('Capturando imagem da câmera...');
+        console.log('Capturando imagem da câmera nativa...');
         const file = e.target.files[0];
         const rawBase64 = await fileToBase64(file);
         const base64 = await compressImage(rawBase64);
@@ -150,6 +153,49 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       toast.error('Ocorreu um erro ao processar a imagem da câmera. Tente de novo.');
     } finally {
       if (cameraInputRef.current) cameraInputRef.current.value = '';
+    }
+  };
+
+  const handleModalCapture = async (base64: string) => {
+    try {
+      console.log('Imagem capturada via modal...');
+      const compressedBase64 = await compressImage(base64);
+      
+      if (cameraMode === 'plant') {
+        const att: Attachment = {
+          type: 'image',
+          url: `data:image/jpeg;base64,${compressedBase64}`,
+          base64: compressedBase64,
+          mimeType: 'image/jpeg'
+        };
+        onSendMessage("Opa, companheiro! Dá uma olhada nessa planta aqui pra mim. Me diz o nome dela, se ela tá com alguma praga ou doença, se é tóxica pros bicho e o que eu devo fazer pra cuidar dela direitinho.", att);
+      } else {
+        setAttachment({
+          type: 'image',
+          url: `data:image/jpeg;base64,${compressedBase64}`,
+          base64: compressedBase64,
+          mimeType: 'image/jpeg'
+        });
+      }
+      console.log('Imagem do modal processada com sucesso.');
+    } catch (err) {
+      console.error('Erro ao processar imagem do modal:', err);
+      toast.error('Erro ao processar a foto. Tente novamente.');
+    }
+  };
+
+  const openCamera = (mode: 'general' | 'plant') => {
+    setCameraMode(mode);
+    // Check if getUserMedia is supported
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      setIsCameraModalOpen(true);
+    } else {
+      // Fallback to native camera input
+      if (mode === 'plant') {
+        plantIdInputRef.current?.click();
+      } else {
+        cameraInputRef.current?.click();
+      }
     }
   };
 
@@ -213,6 +259,12 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         accept="image/*"
         capture="environment"
         onChange={handlePlantIdSelect}
+      />
+
+      <CameraModal 
+        isOpen={isCameraModalOpen} 
+        onClose={() => setIsCameraModalOpen(false)} 
+        onCapture={handleModalCapture} 
       />
 
       {attachment && (
@@ -312,10 +364,10 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
           )}
         </div>
 
-        {/* Quick Actions for Producer Assistant */}
+         {/* Quick Actions for Producer Assistant */}
         <div className="flex justify-center gap-4 mt-4">
            <button 
-             onClick={() => cameraInputRef.current?.click()} 
+             onClick={() => openCamera('general')} 
              className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-stone-50 hover:bg-farm-50 border border-stone-100 hover:border-farm-200 transition-all group min-w-[80px]"
            >
               <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
@@ -325,7 +377,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
            </button>
 
            <button 
-             onClick={() => plantIdInputRef.current?.click()} 
+             onClick={() => openCamera('plant')} 
              className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-stone-50 hover:bg-blue-50 border border-stone-100 hover:border-blue-200 transition-all group min-w-[80px]"
            >
               <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
