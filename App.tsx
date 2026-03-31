@@ -32,6 +32,7 @@ import RetailerInsights from './components/RetailerInsights';
 import ConsumerHub from './components/ConsumerHub';
 import ProfessionalHub from './components/ProfessionalHub';
 import ErrorBoundary from './components/ErrorBoundary';
+import AuthCallback from './components/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 
 import { useLocationWeather } from './hooks/useLocationWeather';
@@ -159,6 +160,8 @@ const App: React.FC = () => {
           />
         )
       } />
+      
+      <Route path="/auth/callback" element={<AuthCallback />} />
       
       <Route element={<ProtectedRoute><ChatProvider><MainLayout /></ChatProvider></ProtectedRoute>}>
         <Route path="/" element={<HomeRedirect />} />

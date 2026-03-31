@@ -29,21 +29,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   useEffect(() => {
     const checkSession = async () => {
+      console.log("[AuthContext] Checking session...");
       try {
         const { data: { session } } = await supabase.auth.getSession();
+        console.log("[AuthContext] Session found:", !!session);
         if (session?.user) {
+          console.log("[AuthContext] User ID:", session.user.id);
           const savedProfile = localStorage.getItem('agro_currentUser');
           if (savedProfile) {
+            console.log("[AuthContext] Loading saved profile from localStorage");
             setCurrentUser(JSON.parse(savedProfile));
           }
 
-          const { data: profileData } = await supabase
+          const { data: profileData, error: profileError } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('id', session.user.id)
             .single();
             
+          if (profileError) {
+            console.warn("[AuthContext] Error fetching profile:", profileError.message);
+          }
+
           if (profileData) {
+            console.log("[AuthContext] Profile found in DB, role:", profileData.role);
             const profile: UserProfile = {
               id: profileData.id,
               email: profileData.email,
@@ -61,6 +70,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setUserRole(profile.role);
             setIsAuthenticated(true);
           } else {
+            console.log("[AuthContext] No profile in DB, creating temporary profile");
             const profile: UserProfile = {
               id: session.user.id,
               email: session.user.email || '',
@@ -73,12 +83,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setIsAuthenticated(true);
           }
         } else {
+          console.log("[AuthContext] No session found");
           setIsAuthenticated(false);
           setCurrentUser(null);
         }
       } catch (error) {
-        console.error("Erro ao verificar sessão inicial:", error);
+        console.error("[AuthContext] Erro ao verificar sessão inicial:", error);
       } finally {
+        console.log("[AuthContext] Auth loading finished");
         setIsAuthLoading(false);
       }
     };
@@ -86,15 +98,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log("[AuthContext] onAuthStateChange event:", event);
       if (session?.user) {
+        console.log("[AuthContext] onAuthStateChange session user ID:", session.user.id);
         setIsAuthenticated(true);
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+          console.log("[AuthContext] SIGNED_IN or INITIAL_SESSION, fetching profile...");
           const { data: profileData } = await supabase
             .from('user_profiles')
             .select('*')
             .eq('id', session.user.id)
             .single();
           if (profileData) {
+            console.log("[AuthContext] Profile found after event, role:", profileData.role);
             const profile: UserProfile = {
               id: profileData.id,
               email: profileData.email,
@@ -113,6 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           }
         }
       } else if (event === 'SIGNED_OUT') {
+        console.log("[AuthContext] User signed out");
         setIsAuthenticated(false);
         setCurrentUser(null);
         localStorage.removeItem('agro_isAuthenticated');
@@ -205,7 +222,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: window.location.origin
+          redirectTo: `${window.location.origin}/auth/callback`
         }
       });
       if (error) throw error;
