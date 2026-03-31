@@ -3,8 +3,8 @@ import React, { useEffect } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { UserRole } from './types';
-import { supabase } from './services/supabaseClient';
-import { Bot } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from './services/supabaseClient';
+import { Bot, AlertCircle } from 'lucide-react';
 
 // Contexts & Hooks
 import { useAuth } from './contexts/AuthContext';
@@ -40,6 +40,13 @@ import { useLocationWeather } from './hooks/useLocationWeather';
 const App: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Debug logs in App.tsx
+  useEffect(() => {
+    console.log('[App] VITE_SUPABASE_URL:', import.meta.env.VITE_SUPABASE_URL || 'MISSING');
+    console.log('[App] VITE_SUPABASE_ANON_KEY:', import.meta.env.VITE_SUPABASE_ANON_KEY ? 'PRESENT' : 'MISSING');
+  }, []);
+
   const { 
     isAuthenticated, 
     isAuthLoading, 
@@ -129,7 +136,14 @@ const App: React.FC = () => {
   }
 
   return (
-    <Routes>
+    <>
+      {!isSupabaseConfigured && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] bg-red-600 text-white p-2 text-center text-xs font-bold flex items-center justify-center gap-2">
+          <AlertCircle size={14} />
+          Supabase não configurado. Verifique as variáveis de ambiente na Vercel.
+        </div>
+      )}
+      <Routes>
       <Route path="/login" element={
         isAuthenticated ? <Navigate to="/chat" replace /> : (
           <ErrorBoundary>
@@ -184,6 +198,7 @@ const App: React.FC = () => {
 
       <Route path="*" element={<Navigate to="/chat" replace />} />
     </Routes>
+    </>
   );
 };
 
