@@ -140,6 +140,8 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         const rawBase64 = await fileToBase64(file);
         const base64 = await compressImage(rawBase64);
         
+        console.log('[Camera] upload/request started', { size: file.size, type: file.type });
+        
         setAttachment({
           type: 'image',
           url: URL.createObjectURL(file),
@@ -161,7 +163,10 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       console.log('Imagem capturada via modal...');
       const compressedBase64 = await compressImage(base64);
       
+      console.log('[Camera] upload/request started', { length: compressedBase64.length });
+
       if (cameraMode === 'plant') {
+        console.log('[Identify] capture received (modal)');
         const att: Attachment = {
           type: 'image',
           url: `data:image/jpeg;base64,${compressedBase64}`,
@@ -207,6 +212,9 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         const rawBase64 = await fileToBase64(file);
         const base64 = await compressImage(rawBase64);
         
+        console.log('[Identify] capture received (native)', { size: file.size });
+        console.log('[Camera] upload/request started', { size: file.size, type: file.type });
+
         const att: Attachment = {
           type: 'image',
           url: URL.createObjectURL(file),

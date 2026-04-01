@@ -16,12 +16,23 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
   const [isReady, setIsReady] = useState(false);
   const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
   const [isLoading, setIsLoading] = useState(true);
+  const [showFallback, setShowFallback] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      return /android|iphone|ipad|ipod/i.test(userAgent);
+    };
+    setIsMobile(checkMobile());
+  }, []);
 
   const startCamera = async () => {
     if (!isOpen) return;
     console.log("[Camera] start requested", { facingMode });
     setIsLoading(true);
     setIsReady(false);
+    setShowFallback(false);
     
     const constraints = [
       { video: { facingMode: { ideal: 'environment' } }, audio: false },
@@ -45,6 +56,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
 
     if (!newStream) {
       console.error("[Camera] all constraints failed", lastError);
+      console.log("[CameraMobile] getUserMedia failed");
       let msg = "Não foi possível acessar a câmera.";
       
       if (lastError) {
@@ -60,9 +72,15 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
         }
       }
       
-      toast.error(msg);
-      onClose();
-      setIsLoading(false);
+      if (isMobile) {
+        console.log("[CameraMobile] using file input fallback");
+        setShowFallback(true);
+        setIsLoading(false);
+      } else {
+        toast.error(msg);
+        onClose();
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -132,6 +150,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
   }, []);
 
   const captureImage = () => {
+    console.log("[Camera] capture clicked");
     if (videoRef.current && canvasRef.current) {
       const video = videoRef.current;
       const canvas = canvasRef.current;
@@ -141,11 +160,30 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        console.log("[Camera] frame drawn to canvas");
         
-        const base64 = canvas.toDataURL('image/jpeg', 0.8).split(',')[1];
+        const base64Full = canvas.toDataURL('image/jpeg', 0.8);
+        const base64 = base64Full.split(',')[1];
+        console.log(`[Camera] image generated size/mime: ${Math.round(base64.length * 0.75 / 1024)}KB / image/jpeg`);
+        
         onCapture(base64);
         onClose();
       }
+    }
+  };
+
+  const handleFallbackChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      console.log("[CameraMobile] file selected");
+      const file = e.target.files[0];
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1];
+        onCapture(base64);
+        onClose();
+      };
+      reader.readAsDataURL(file);
     }
   };
 
@@ -183,6 +221,29 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
               <p className="text-sm font-bold tracking-widest uppercase opacity-50">Iniciando Câmera...</p>
             </div>
           )}
+          
+          {showFallback && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-white gap-6 z-10 p-6 text-center">
+              <div className="p-4 bg-stone-800 rounded-2xl border border-white/10">
+                <Camera size={48} className="text-stone-400 mx-auto mb-4" />
+                <p className="text-sm font-medium mb-2">Não conseguimos abrir o preview da câmera.</p>
+                <p className="text-xs text-stone-500 mb-6">Mas você ainda pode tirar uma foto usando a câmera do seu aparelho.</p>
+                
+                <label className="inline-flex items-center justify-center px-6 py-3 bg-farm-600 hover:bg-farm-700 text-white rounded-full font-bold text-sm cursor-pointer transition-colors shadow-lg">
+                  <Camera size={18} className="mr-2" />
+                  Tirar foto com câmera do aparelho
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    capture="environment" 
+                    className="hidden" 
+                    onChange={handleFallbackChange}
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+
           <video 
             ref={videoRef} 
             autoPlay 
