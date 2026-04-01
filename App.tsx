@@ -37,6 +37,7 @@ const RetailPOSView = lazy(() => import('./components/RetailPOSView'));
 const RetailerInsights = lazy(() => import('./components/RetailerInsights'));
 const ConsumerHub = lazy(() => import('./components/ConsumerHub'));
 const ProfessionalHub = lazy(() => import('./components/ProfessionalHub'));
+const PlantIdentification = lazy(() => import('./components/PlantIdentification'));
 
 const PageLoader = () => (
   <div className="h-full w-full flex items-center justify-center bg-stone-50/50 backdrop-blur-sm">
@@ -202,6 +203,7 @@ const App: React.FC = () => {
         <Route path="/professional-hub" element={<Suspense fallback={<PageLoader />}><ProfessionalHub setView={setView} /></Suspense>} />
         <Route path="/settings" element={<Suspense fallback={<PageLoader />}><Settings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} /></Suspense>} />
         <Route path="/registry" element={<Suspense fallback={<PageLoader />}><PlantRegistry currentUser={currentUser} /></Suspense>} />
+        <Route path="/plant-id" element={<Suspense fallback={<PageLoader />}><PlantIdentification /></Suspense>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/chat" replace />} />
