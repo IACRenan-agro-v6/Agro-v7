@@ -1,41 +1,48 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, Suspense, lazy } from 'react';
 import { Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { Toaster, toast } from 'sonner';
 import { UserRole } from './types';
 import { supabase, isSupabaseConfigured } from './services/supabaseClient';
-import { Bot, AlertCircle } from 'lucide-react';
+import { Bot, AlertCircle, Loader2 } from 'lucide-react';
 
 // Contexts & Hooks
 import { useAuth } from './contexts/AuthContext';
 import { ChatProvider } from './contexts/ChatContext';
 import { useTheme } from './hooks/useTheme';
 import { useNavigation } from './hooks/useNavigation';
+import { useLocationWeather } from './hooks/useLocationWeather';
 
 // Components
 import MainLayout from './components/MainLayout';
-import ChatView from './components/ChatView';
-import CropPlanner from './components/CropPlanner';
-import CameraGrid from './components/CameraGrid';
-import AutomationControl from './components/AutomationControl';
-import FarmDashboard from './components/FarmDashboard';
-import LoginScreen from './components/LoginScreen';
-import RegistrationScreen from './components/RegistrationScreen';
-import EmaterChannel from './components/EmaterChannel';
-import SystemPresentation from './components/SystemPresentation';
-import Settings from './components/Settings';
-import PlantRegistry from './components/PlantRegistry';
-import MarketView from './components/MarketView';
-import LogisticsView from './components/LogisticsView';
-import RetailPOSView from './components/RetailPOSView';
-import RetailerInsights from './components/RetailerInsights';
-import ConsumerHub from './components/ConsumerHub';
-import ProfessionalHub from './components/ProfessionalHub';
 import ErrorBoundary from './components/ErrorBoundary';
 import AuthCallback from './components/AuthCallback';
 import ProtectedRoute from './components/ProtectedRoute';
 
-import { useLocationWeather } from './hooks/useLocationWeather';
+// Lazy loaded components
+const ChatView = lazy(() => import('./components/ChatView'));
+const CropPlanner = lazy(() => import('./components/CropPlanner'));
+const CameraGrid = lazy(() => import('./components/CameraGrid'));
+const AutomationControl = lazy(() => import('./components/AutomationControl'));
+const FarmDashboard = lazy(() => import('./components/FarmDashboard'));
+const LoginScreen = lazy(() => import('./components/LoginScreen'));
+const RegistrationScreen = lazy(() => import('./components/RegistrationScreen'));
+const EmaterChannel = lazy(() => import('./components/EmaterChannel'));
+const SystemPresentation = lazy(() => import('./components/SystemPresentation'));
+const Settings = lazy(() => import('./components/Settings'));
+const PlantRegistry = lazy(() => import('./components/PlantRegistry'));
+const MarketView = lazy(() => import('./components/MarketView'));
+const LogisticsView = lazy(() => import('./components/LogisticsView'));
+const RetailPOSView = lazy(() => import('./components/RetailPOSView'));
+const RetailerInsights = lazy(() => import('./components/RetailerInsights'));
+const ConsumerHub = lazy(() => import('./components/ConsumerHub'));
+const ProfessionalHub = lazy(() => import('./components/ProfessionalHub'));
+
+const PageLoader = () => (
+  <div className="h-full w-full flex items-center justify-center bg-stone-50/50 backdrop-blur-sm">
+    <Loader2 className="animate-spin text-farm-600" size={32} />
+  </div>
+);
 
 const App: React.FC = () => {
   const navigate = useNavigate();
@@ -147,31 +154,35 @@ const App: React.FC = () => {
       <Route path="/login" element={
         isAuthenticated ? <Navigate to="/chat" replace /> : (
           <ErrorBoundary>
-            <LoginScreen 
-              onLogin={onLogin} 
-              onGoogleLogin={onGoogleLogin}
-              onGoToRegister={() => navigate('/register')}
-              isLoading={false}
-            />
+            <Suspense fallback={<PageLoader />}>
+              <LoginScreen 
+                onLogin={onLogin} 
+                onGoogleLogin={onGoogleLogin}
+                onGoToRegister={() => navigate('/register')}
+                isLoading={false}
+              />
+            </Suspense>
           </ErrorBoundary>
         )
       } />
       <Route path="/register" element={
         isAuthenticated ? <Navigate to="/chat" replace /> : (
-          <RegistrationScreen 
-            onBack={() => navigate('/login')}
-            isLoading={false}
-            onRegister={async (role, data) => {
-              try {
-                await register(role, data);
-                navigate(getLandingPage(role));
-              } catch (error: any) {
-                console.error("Erro no cadastro:", error.message);
-                toast.error("Não foi possível criar sua conta. Verifique se os dados estão certinhos.");
-              }
-            }}
-            onGoogleLogin={onGoogleLogin}
-          />
+          <Suspense fallback={<PageLoader />}>
+            <RegistrationScreen 
+              onBack={() => navigate('/login')}
+              isLoading={false}
+              onRegister={async (role, data) => {
+                try {
+                  await register(role, data);
+                  navigate(getLandingPage(role));
+                } catch (error: any) {
+                  console.error("Erro no cadastro:", error.message);
+                  toast.error("Não foi possível criar sua conta. Verifique se os dados estão certinhos.");
+                }
+              }}
+              onGoogleLogin={onGoogleLogin}
+            />
+          </Suspense>
         )
       } />
       
@@ -179,21 +190,21 @@ const App: React.FC = () => {
       
       <Route element={<ProtectedRoute><ChatProvider><MainLayout /></ChatProvider></ProtectedRoute>}>
         <Route path="/" element={<HomeRedirect />} />
-        <Route path="/chat" element={<ChatView />} />
-        <Route path="/dashboard" element={<FarmDashboard />} />
-        <Route path="/planner" element={<CropPlanner userLocation={userLocation} setView={setView} />} />
-        <Route path="/cameras" element={<CameraGrid />} />
-        <Route path="/automations" element={<AutomationControl />} />
-        <Route path="/emater" element={<EmaterChannel />} />
-        <Route path="/presentation" element={<SystemPresentation />} />
-        <Route path="/market" element={<MarketView currentUser={currentUser} setView={setView} />} />
-        <Route path="/logistics" element={<LogisticsView />} />
-        <Route path="/pos" element={<RetailPOSView />} />
-        <Route path="/retail-insights" element={<RetailerInsights setView={setView} />} />
-        <Route path="/consumer-hub" element={<ConsumerHub setView={setView} />} />
-        <Route path="/professional-hub" element={<ProfessionalHub setView={setView} />} />
-        <Route path="/settings" element={<Settings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} />} />
-        <Route path="/registry" element={<PlantRegistry currentUser={currentUser} />} />
+        <Route path="/chat" element={<Suspense fallback={<PageLoader />}><ChatView /></Suspense>} />
+        <Route path="/dashboard" element={<Suspense fallback={<PageLoader />}><FarmDashboard /></Suspense>} />
+        <Route path="/planner" element={<Suspense fallback={<PageLoader />}><CropPlanner userLocation={userLocation} setView={setView} /></Suspense>} />
+        <Route path="/cameras" element={<Suspense fallback={<PageLoader />}><CameraGrid /></Suspense>} />
+        <Route path="/automations" element={<Suspense fallback={<PageLoader />}><AutomationControl /></Suspense>} />
+        <Route path="/emater" element={<Suspense fallback={<PageLoader />}><EmaterChannel /></Suspense>} />
+        <Route path="/presentation" element={<Suspense fallback={<PageLoader />}><SystemPresentation /></Suspense>} />
+        <Route path="/market" element={<Suspense fallback={<PageLoader />}><MarketView currentUser={currentUser} setView={setView} /></Suspense>} />
+        <Route path="/logistics" element={<Suspense fallback={<PageLoader />}><LogisticsView /></Suspense>} />
+        <Route path="/pos" element={<Suspense fallback={<PageLoader />}><RetailPOSView /></Suspense>} />
+        <Route path="/retail-insights" element={<Suspense fallback={<PageLoader />}><RetailerInsights setView={setView} /></Suspense>} />
+        <Route path="/consumer-hub" element={<Suspense fallback={<PageLoader />}><ConsumerHub setView={setView} /></Suspense>} />
+        <Route path="/professional-hub" element={<Suspense fallback={<PageLoader />}><ProfessionalHub setView={setView} /></Suspense>} />
+        <Route path="/settings" element={<Suspense fallback={<PageLoader />}><Settings isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode} /></Suspense>} />
+        <Route path="/registry" element={<Suspense fallback={<PageLoader />}><PlantRegistry currentUser={currentUser} /></Suspense>} />
       </Route>
 
       <Route path="*" element={<Navigate to="/chat" replace />} />

@@ -1,45 +1,107 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, Filter, Calendar, MapPin, AlertTriangle, CheckCircle2, ChevronRight, Flower2, Sprout, Bug, Activity, X, Loader2, RefreshCw } from 'lucide-react';
 import { IdentifiedPlant, UserProfile } from '../types';
 import { dbService } from '../services/dbService';
+import PlantCard from './PlantCard';
+import PlantSkeleton from './PlantSkeleton';
 
 interface PlantRegistryProps {
   currentUser?: UserProfile | null;
 }
 
 const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
+  const [searchInput, setSearchInput] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'healthy' | 'attention'>('all');
   const [selectedPlant, setSelectedPlant] = useState<IdentifiedPlant | null>(null);
   const [plants, setPlants] = useState<IdentifiedPlant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const observer = useRef<IntersectionObserver | null>(null);
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   useEffect(() => {
     if (currentUser) {
-      loadPlants();
+      setPage(0);
+      setPlants([]);
+      setHasMore(true);
+      loadPlants(0);
     }
   }, [currentUser]);
 
-  const loadPlants = async () => {
+  const loadPlants = async (pageNum: number) => {
     if (!currentUser) return;
-    setLoading(true);
-    const data = await dbService.getPlantHistory(currentUser.id);
-    setPlants(data);
-    setLoading(false);
+    
+    if (pageNum === 0) {
+      setLoading(true);
+    } else {
+      setLoadingMore(true);
+    }
+
+    try {
+      const data = await dbService.getPlantHistory(currentUser.id, pageNum, 20);
+      
+      if (data.length < 20) {
+        setHasMore(false);
+      }
+
+      if (pageNum === 0) {
+        setPlants(data);
+      } else {
+        setPlants(prev => [...prev, ...data]);
+      }
+    } catch (error) {
+      console.error("Erro ao carregar plantas:", error);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
   };
 
-  const filteredPlants = plants.filter(plant => {
-    const matchesSearch = plant.commonName.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          plant.diagnosisSummary.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (filterType === 'all') return matchesSearch;
-    if (filterType === 'healthy') return matchesSearch && plant.healthStatus === 'healthy';
-    if (filterType === 'attention') return matchesSearch && plant.healthStatus !== 'healthy';
-    
-    return matchesSearch;
-  });
+  const lastPlantElementRef = useCallback((node: HTMLDivElement) => {
+    if (loading || loadingMore) return;
+    if (observer.current) observer.current.disconnect();
+    observer.current = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting && hasMore) {
+        setPage(prevPage => {
+          const nextPage = prevPage + 1;
+          loadPlants(nextPage);
+          return nextPage;
+        });
+      }
+    });
+    if (node) observer.current.observe(node);
+  }, [loading, loadingMore, hasMore]);
+
+  const filteredPlants = useMemo(() => {
+    return plants.filter(plant => {
+      const matchesSearch = plant.commonName.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            plant.diagnosisSummary.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      if (filterType === 'all') return matchesSearch;
+      if (filterType === 'healthy') return matchesSearch && plant.healthStatus === 'healthy';
+      if (filterType === 'attention') return matchesSearch && plant.healthStatus !== 'healthy';
+      
+      return matchesSearch;
+    });
+  }, [plants, searchTerm, filterType]);
+
+  const handleRefresh = () => {
+    setPage(0);
+    setHasMore(true);
+    loadPlants(0);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -73,7 +135,7 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto items-center">
            {/* Refresh Button */}
            <button 
-             onClick={loadPlants}
+             onClick={handleRefresh}
              disabled={loading}
              className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-500 hover:text-farm-600 hover:border-farm-200 transition-all shadow-sm"
              title="Atualizar Histórico"
@@ -86,8 +148,8 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
               <input 
                 type="text" 
                 placeholder="Buscar planta..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-10 pr-4 py-2.5 rounded-xl border border-stone-200 bg-white focus:ring-2 focus:ring-farm-100 outline-none w-full md:w-64 text-sm font-medium shadow-sm"
               />
               <Search className="absolute left-3 top-3 text-stone-400" size={16} />
@@ -117,56 +179,37 @@ const PlantRegistry: React.FC<PlantRegistryProps> = ({ currentUser }) => {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="animate-spin text-farm-600 mb-4" size={40} />
-          <p className="text-stone-500 font-medium">Sincronizando com Supabase...</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {[...Array(8)].map((_, i) => (
+            <PlantSkeleton key={i} />
+          ))}
         </div>
       ) : (
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
-        >
-          {filteredPlants.map((plant) => (
-            <motion.div 
-              layout
-              key={plant.id}
-              onClick={() => setSelectedPlant(plant)}
-              whileHover={{ y: -5 }}
-              className="bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-xl transition-all duration-300 cursor-pointer group overflow-hidden"
-            >
-                <div className="relative h-56 overflow-hidden">
-                  <img src={plant.imageUrl} alt={plant.commonName} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                  <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-60 group-hover:opacity-80 transition-opacity"></div>
-                  <div className="absolute top-3 right-3">{getStatusBadge(plant.healthStatus)}</div>
-                  <div className="absolute bottom-3 left-3 text-white">
-                      <h3 className="text-xl font-bold leading-none mb-1 shadow-black drop-shadow-md">{plant.commonName}</h3>
-                      <p className="text-xs font-medium opacity-90 italic">{plant.scientificName}</p>
+        <>
+          <motion.div 
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
+          >
+            {filteredPlants.map((plant, index) => {
+              if (filteredPlants.length === index + 1) {
+                return (
+                  <div ref={lastPlantElementRef} key={plant.id}>
+                    <PlantCard plant={plant} onClick={setSelectedPlant} />
                   </div>
-                </div>
-
-                <div className="p-5">
-                  <div className="flex justify-between items-start mb-4">
-                      <div>
-                        <div className="text-[10px] uppercase text-stone-400 font-bold tracking-widest mb-1">Diagnóstico</div>
-                        <div className={`font-bold text-sm ${plant.healthStatus === 'healthy' ? 'text-green-700' : 'text-red-700'}`}>
-                          {plant.diagnosisSummary}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-[10px] uppercase text-stone-400 font-bold tracking-widest mb-1">Confiança</div>
-                        <div className="font-bold text-sm text-farm-600">{plant.confidence}%</div>
-                      </div>
-                  </div>
-
-                  <div className="pt-4 border-t border-stone-100 flex justify-between items-center text-xs text-stone-500 font-medium">
-                      <span className="flex items-center gap-1"><Calendar size={12}/> {plant.date}</span>
-                      <span className="flex items-center gap-1 group-hover:text-farm-600 transition-colors">Ver Detalhes <ChevronRight size={14} /></span>
-                  </div>
-                </div>
-            </motion.div>
-          ))}
-        </motion.div>
+                );
+              } else {
+                return <PlantCard key={plant.id} plant={plant} onClick={setSelectedPlant} />;
+              }
+            })}
+          </motion.div>
+          
+          {loadingMore && (
+            <div className="flex justify-center py-8">
+              <Loader2 className="animate-spin text-farm-600" size={32} />
+            </div>
+          )}
+        </>
       )}
 
       {!loading && filteredPlants.length === 0 && (

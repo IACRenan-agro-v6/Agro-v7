@@ -80,15 +80,19 @@ export const dbService = {
   },
 
   /**
-   * Busca o histórico de plantas identificadas de um usuário específico.
+   * Busca o histórico de plantas identificadas de um usuário específico com suporte a paginação.
    */
-  async getPlantHistory(userId: string): Promise<IdentifiedPlant[]> {
+  async getPlantHistory(userId: string, page: number = 0, pageSize: number = 20): Promise<IdentifiedPlant[]> {
     try {
+      const from = page * pageSize;
+      const to = from + pageSize - 1;
+
       const { data, error } = await supabase
         .from('plants')
         .select('*')
         .eq('user_id', userId)
-        .order('date', { ascending: false });
+        .order('date', { ascending: false })
+        .range(from, to);
 
       if (error) throw error;
       
@@ -105,14 +109,19 @@ export const dbService = {
         location: r.location
       }));
 
-      // Cache the results
-      await cacheService.cachePlantHistory(history);
+      // Only cache the first page for offline access to keep it simple
+      if (page === 0) {
+        await cacheService.cachePlantHistory(history);
+      }
 
       return history;
     } catch (error) {
       console.error("Erro ao buscar histórico:", error);
-      // Try to return from cache if offline
-      return await cacheService.getCachedPlantHistory();
+      // Try to return from cache if offline and on first page
+      if (page === 0) {
+        return await cacheService.getCachedPlantHistory();
+      }
+      return [];
     }
   },
 
