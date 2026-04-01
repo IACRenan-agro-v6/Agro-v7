@@ -24,8 +24,74 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [userRole, setUserRole] = useState<UserRole>(() => {
-    return (localStorage.getItem('agro_userRole') as UserRole) || UserRole.CONSUMER;
+    const savedRole = localStorage.getItem('agro_userRole');
+    console.log("[AuthContext] Initial role from localStorage:", savedRole);
+    return (savedRole as UserRole) || UserRole.CONSUMER;
   });
+
+  const fetchOrCreateProfile = async (user: any, preferredRole: UserRole): Promise<UserProfile> => {
+    console.log(`[AuthContext] Fetching profile for user ${user.id}...`);
+    
+    try {
+      const { data: profileData, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', user.id)
+        .maybeSingle();
+        
+      if (profileError) {
+        console.error("[AuthContext] Error fetching profile:", profileError.message);
+        throw profileError;
+      }
+
+      if (profileData) {
+        console.log("[AuthContext] Profile found in DB, role:", profileData.role);
+        return {
+          id: profileData.id,
+          email: profileData.email,
+          role: profileData.role as UserRole,
+          fullName: profileData.full_name,
+          document: profileData.document,
+          phone: profileData.phone,
+          createdAt: profileData.created_at,
+          producerData: profileData.producer_data,
+          retailerData: profileData.retailer_data,
+          professionalData: profileData.professional_data,
+          consumerData: profileData.consumer_data
+        };
+      }
+
+      console.log("[AuthContext] Profile missing, creating new profile...");
+      const newProfile: UserProfile = {
+        id: user.id,
+        email: user.email || '',
+        role: preferredRole,
+        fullName: user.user_metadata?.full_name || user.user_metadata?.name || 'Usuário',
+        document: '',
+        createdAt: new Date().toISOString()
+      };
+
+      const success = await dbService.saveUserProfile(newProfile);
+      if (success) {
+        console.log("[AuthContext] Profile created successfully");
+        return newProfile;
+      } else {
+        console.error("[AuthContext] Failed to create profile in DB");
+        return newProfile; // Return anyway to allow app to function
+      }
+    } catch (error) {
+      console.error("[AuthContext] Exception in fetchOrCreateProfile:", error);
+      // Fallback to a temporary profile to prevent app crash
+      return {
+        id: user.id,
+        email: user.email || '',
+        role: preferredRole,
+        fullName: user.user_metadata?.full_name || 'Usuário',
+        document: '',
+        createdAt: new Date().toISOString()
+      };
+    }
+  };
 
   useEffect(() => {
     const checkSession = async () => {
@@ -35,53 +101,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log("[AuthContext] Session found:", !!session);
         if (session?.user) {
           console.log("[AuthContext] User ID:", session.user.id);
-          const savedProfile = localStorage.getItem('agro_currentUser');
-          if (savedProfile) {
-            console.log("[AuthContext] Loading saved profile from localStorage");
-            setCurrentUser(JSON.parse(savedProfile));
-          }
+          
+          // Try to get role from localStorage first to ensure consistency
+          const savedRole = localStorage.getItem('agro_userRole') as UserRole;
+          const roleToUse = savedRole || userRole;
 
-          const { data: profileData, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-            
-          if (profileError) {
-            console.warn("[AuthContext] Error fetching profile:", profileError.message);
-          }
-
-          if (profileData) {
-            console.log("[AuthContext] Profile found in DB, role:", profileData.role);
-            const profile: UserProfile = {
-              id: profileData.id,
-              email: profileData.email,
-              role: profileData.role as UserRole,
-              fullName: profileData.full_name,
-              document: profileData.document,
-              phone: profileData.phone,
-              createdAt: profileData.created_at,
-              producerData: profileData.producer_data,
-              retailerData: profileData.retailer_data,
-              professionalData: profileData.professional_data,
-              consumerData: profileData.consumer_data
-            };
-            setCurrentUser(profile);
-            setUserRole(profile.role);
-            setIsAuthenticated(true);
-          } else {
-            console.log("[AuthContext] No profile in DB, creating temporary profile");
-            const profile: UserProfile = {
-              id: session.user.id,
-              email: session.user.email || '',
-              role: userRole,
-              fullName: session.user.user_metadata?.full_name || 'Usuário',
-              document: '',
-              createdAt: new Date().toISOString()
-            };
-            setCurrentUser(profile);
-            setIsAuthenticated(true);
-          }
+          const profile = await fetchOrCreateProfile(session.user, roleToUse);
+          setCurrentUser(profile);
+          setUserRole(profile.role);
+          setIsAuthenticated(true);
         } else {
           console.log("[AuthContext] No session found");
           setIsAuthenticated(false);
@@ -102,31 +130,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (session?.user) {
         console.log("[AuthContext] onAuthStateChange session user ID:", session.user.id);
         setIsAuthenticated(true);
+        
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          console.log("[AuthContext] SIGNED_IN or INITIAL_SESSION, fetching profile...");
-          const { data: profileData } = await supabase
-            .from('user_profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          if (profileData) {
-            console.log("[AuthContext] Profile found after event, role:", profileData.role);
-            const profile: UserProfile = {
-              id: profileData.id,
-              email: profileData.email,
-              role: profileData.role as UserRole,
-              fullName: profileData.full_name,
-              document: profileData.document,
-              phone: profileData.phone,
-              createdAt: profileData.created_at,
-              producerData: profileData.producer_data,
-              retailerData: profileData.retailer_data,
-              professionalData: profileData.professional_data,
-              consumerData: profileData.consumer_data
-            };
-            setCurrentUser(profile);
-            setUserRole(profile.role);
-          }
+          console.log("[AuthContext] SIGNED_IN or INITIAL_SESSION, ensuring profile exists...");
+          
+          const savedRole = localStorage.getItem('agro_userRole') as UserRole;
+          const roleToUse = savedRole || userRole;
+          
+          const profile = await fetchOrCreateProfile(session.user, roleToUse);
+          setCurrentUser(profile);
+          setUserRole(profile.role);
         }
       } else if (event === 'SIGNED_OUT') {
         console.log("[AuthContext] User signed out");
@@ -161,42 +174,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (error) throw error;
       
       if (data.user) {
-        setUserRole(role);
+        console.log("[AuthContext] Login successful, user ID:", data.user.id);
         setIsAuthenticated(true);
         
-        const { data: profileData } = await supabase
-          .from('user_profiles')
-          .select('*')
-          .eq('id', data.user.id)
-          .single();
-          
-        if (profileData) {
-          const profile: UserProfile = {
-            id: profileData.id,
-            email: profileData.email,
-            role: profileData.role as UserRole,
-            fullName: profileData.full_name,
-            document: profileData.document,
-            phone: profileData.phone,
-            createdAt: profileData.created_at,
-            producerData: profileData.producer_data,
-            retailerData: profileData.retailer_data,
-            professionalData: profileData.professional_data,
-            consumerData: profileData.consumer_data
-          };
-          setCurrentUser(profile);
-          setUserRole(profile.role);
-        } else {
-          const profile: UserProfile = {
-            id: data.user.id,
-            email: data.user.email || '',
-            role: role,
-            fullName: data.user.user_metadata?.full_name || 'Usuário',
-            document: '',
-            createdAt: new Date().toISOString()
-          };
-          setCurrentUser(profile);
-        }
+        const profile = await fetchOrCreateProfile(data.user, role);
+        setCurrentUser(profile);
+        setUserRole(profile.role);
       }
       return;
     }
