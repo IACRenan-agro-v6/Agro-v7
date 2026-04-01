@@ -5,8 +5,10 @@ import App from './App';
 import './index.css';
 import { AuthProvider } from './contexts/AuthContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { isSupabaseConfigured } from './services/supabaseClient';
 
 console.log("IAC Farm: index.tsx executing...");
+console.log("Supabase Configured:", isSupabaseConfigured);
 
 const rootElement = document.getElementById('root');
 if (rootElement) {
