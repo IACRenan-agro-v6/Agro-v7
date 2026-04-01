@@ -74,8 +74,8 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isPlaying, onToggleA
           </div>
           
           <div className="flex items-center justify-between mt-2">
-            {/* Audio Button (Temporarily Disabled) */}
-            {/* {isAssistant && !message.isThinking && onToggleAudio && (
+            {/* Audio Button (Only Assistant & Not Thinking) */}
+            {isAssistant && !message.isThinking && onToggleAudio && (
                <button 
                  onClick={() => onToggleAudio(message.id)}
                  className={`
@@ -98,7 +98,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isPlaying, onToggleA
                  )}
                  <span>{message.isAudioLoading ? 'Gerando...' : (isPlaying ? 'Parar' : 'Ouvir')}</span>
                </button>
-            )} */}
+            )}
 
             <span className={`text-[10px] font-medium opacity-60 ml-auto ${isUser ? 'text-white' : 'text-gray-500'}`}>
               {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
