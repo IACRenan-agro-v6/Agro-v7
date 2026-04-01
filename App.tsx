@@ -67,19 +67,25 @@ const App: React.FC = () => {
   const { setView } = useNavigation();
   const { userLocation } = useLocationWeather();
 
+  const [showFallback, setShowFallback] = React.useState(false);
+
   useEffect(() => {
-    const testConnection = async () => {
-      try {
-        console.log("Testando conexão com Supabase...");
-        const { error } = await supabase.from('plants').select('id').limit(1);
-        if (error) console.error("Erro na conexão com Supabase:", error.message);
-        else console.log("Conexão com Supabase estabelecida com sucesso.");
-      } catch (e) {
-        console.error("Falha fatal ao conectar ao Supabase:", e);
+    // If auth is still loading after 2 seconds, show the app shell anyway
+    const timer = setTimeout(() => {
+      if (isAuthLoading) {
+        console.log("[App] Auth loading timeout reached, showing app shell");
+        setShowFallback(true);
       }
-    };
-    testConnection();
-  }, []);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [isAuthLoading]);
+
+  // Log when dashboard is ready
+  useEffect(() => {
+    if (isAuthenticated && !isAuthLoading) {
+      console.log("[App] dashboard ready");
+    }
+  }, [isAuthenticated, isAuthLoading]);
 
   const getLandingPage = (role: UserRole) => {
     const from = (location.state as any)?.from?.pathname;
@@ -127,7 +133,7 @@ const App: React.FC = () => {
     return <Navigate to={getLandingPage(userRole)} replace />;
   };
 
-  if (isAuthLoading) {
+  if (isAuthLoading && !showFallback) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-stone-50">
         <div className="relative">

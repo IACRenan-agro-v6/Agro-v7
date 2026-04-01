@@ -22,12 +22,28 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
+    const savedUser = localStorage.getItem('agro_currentUser');
+    if (savedUser) {
+      try {
+        console.log("[AuthContext] Initial user from localStorage found");
+        return JSON.parse(savedUser);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
   const [userRole, setUserRole] = useState<UserRole>(() => {
     const savedRole = localStorage.getItem('agro_userRole');
     console.log("[AuthContext] Initial role from localStorage:", savedRole);
     return (savedRole as UserRole) || UserRole.CONSUMER;
   });
+
+  useEffect(() => {
+    console.time('app-bootstrap');
+    console.log("[AuthContext] App bootstrap start");
+  }, []);
 
   const fetchOrCreateProfile = async (user: any, preferredRole: UserRole): Promise<UserProfile> => {
     console.log(`[AuthContext] Fetching profile for user ${user.id}...`);
@@ -93,56 +109,66 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  useEffect(() => {
-    const checkSession = async () => {
-      console.log("[AuthContext] Checking session...");
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        console.log("[AuthContext] Session found:", !!session);
-        if (session?.user) {
-          console.log("[AuthContext] User ID:", session.user.id);
-          
-          // Try to get role from localStorage first to ensure consistency
-          const savedRole = localStorage.getItem('agro_userRole') as UserRole;
-          const roleToUse = savedRole || userRole;
-
-          const profile = await fetchOrCreateProfile(session.user, roleToUse);
+  const checkSession = async () => {
+    console.log("[AuthContext] Checking session...");
+    const sessionStart = performance.now();
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      console.log("[AuthContext] Session check took:", (performance.now() - sessionStart).toFixed(2), "ms");
+      console.log("[AuthContext] Session found:", !!session);
+      
+      if (session?.user) {
+        console.log("[AuthContext] session ready");
+        setIsAuthenticated(true);
+        
+        // Don't block auth loading for profile fetching
+        // We already have a cached user from localStorage if available
+        setIsAuthLoading(false);
+        
+        // Fetch fresh profile in background
+        const roleToUse = (localStorage.getItem('agro_userRole') as UserRole) || userRole;
+        fetchOrCreateProfile(session.user, roleToUse).then(profile => {
+          console.log("[AuthContext] profile ready");
           setCurrentUser(profile);
           setUserRole(profile.role);
-          setIsAuthenticated(true);
-        } else {
-          console.log("[AuthContext] No session found");
-          setIsAuthenticated(false);
-          setCurrentUser(null);
-        }
-      } catch (error) {
-        console.error("[AuthContext] Erro ao verificar sessão inicial:", error);
-      } finally {
-        console.log("[AuthContext] Auth loading finished");
+          localStorage.setItem('agro_currentUser', JSON.stringify(profile));
+          localStorage.setItem('agro_userRole', profile.role);
+          console.timeEnd('app-bootstrap');
+        }).catch(err => {
+          console.error("[AuthContext] Background profile fetch failed:", err);
+          console.timeEnd('app-bootstrap');
+        });
+      } else {
+        console.log("[AuthContext] No session found");
+        setIsAuthenticated(false);
+        setCurrentUser(null);
         setIsAuthLoading(false);
+        console.timeEnd('app-bootstrap');
       }
-    };
-    
+    } catch (error) {
+      console.error("[AuthContext] Erro ao verificar sessão inicial:", error);
+      setIsAuthLoading(false);
+      console.timeEnd('app-bootstrap');
+    }
+  };
+  
+  useEffect(() => {
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log("[AuthContext] onAuthStateChange event:", event);
       if (session?.user) {
-        console.log("[AuthContext] onAuthStateChange session user ID:", session.user.id);
         setIsAuthenticated(true);
         
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-          console.log("[AuthContext] SIGNED_IN or INITIAL_SESSION, ensuring profile exists...");
-          
-          const savedRole = localStorage.getItem('agro_userRole') as UserRole;
-          const roleToUse = savedRole || userRole;
-          
+          const roleToUse = (localStorage.getItem('agro_userRole') as UserRole) || userRole;
           const profile = await fetchOrCreateProfile(session.user, roleToUse);
           setCurrentUser(profile);
           setUserRole(profile.role);
+          localStorage.setItem('agro_currentUser', JSON.stringify(profile));
+          localStorage.setItem('agro_userRole', profile.role);
         }
       } else if (event === 'SIGNED_OUT') {
-        console.log("[AuthContext] User signed out");
         setIsAuthenticated(false);
         setCurrentUser(null);
         localStorage.removeItem('agro_isAuthenticated');
