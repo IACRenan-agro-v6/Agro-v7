@@ -7,6 +7,8 @@ import { dbService } from '../services/dbService';
 
 import { cacheService } from '../services/cacheService';
 
+import { fileToBase64, compressImage } from '../utils/fileUtils';
+
 const INITIAL_MESSAGE: Message = {
   id: 'init-1',
   role: MessageRole.ASSISTANT,
@@ -116,7 +118,17 @@ export const useChat = (userLocation: UserLocation | null, currentUser: UserProf
 
     try {
       let responseText = '';
-      const aiTask = await processUserTask(cleanText, attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined);
+      
+      // Convert File to base64 if needed
+      let attachmentForApi = attachment;
+      if (attachment?.file && !attachment.base64) {
+        console.log('[ChatImage] converting file to base64 for API');
+        const rawBase64 = await fileToBase64(attachment.file);
+        const base64 = await compressImage(rawBase64);
+        attachmentForApi = { ...attachment, base64 };
+      }
+
+      const aiTask = await processUserTask(cleanText, attachmentForApi ? { base64: attachmentForApi.base64, mimeType: attachmentForApi.mimeType } : undefined);
       
       if (aiTask) {
         responseText = aiTask.assistantMessage;
@@ -138,7 +150,7 @@ export const useChat = (userLocation: UserLocation | null, currentUser: UserProf
           responseText = `🔍 **Análise de Planta:**\n\n${aiTask.assistantMessage}`;
         }
       } else {
-        responseText = await sendMessageToGemini(messages, text, attachment ? { base64: attachment.base64, mimeType: attachment.mimeType } : undefined, userLocation);
+        responseText = await sendMessageToGemini(messages, text, attachmentForApi ? { base64: attachmentForApi.base64, mimeType: attachmentForApi.mimeType } : undefined, userLocation);
       }
       
       const assistantMsgId = Date.now().toString();
@@ -151,8 +163,8 @@ export const useChat = (userLocation: UserLocation | null, currentUser: UserProf
         setTimeout(() => handleToggleAudio(assistantMsgId), 500);
       }
 
-      if (attachment && attachment.type === 'image' && currentUser) {
-        const publicUrl = await dbService.uploadImage(attachment.base64, "plant_chat");
+      if (attachmentForApi && attachmentForApi.type === 'image' && currentUser) {
+        const publicUrl = await dbService.uploadImage(attachmentForApi.base64, "plant_chat");
         if (publicUrl) {
           await dbService.savePlantDiagnosis({
             commonName: aiTask?.intent === AITaskIntent.PLANT_ID ? (aiTask.extractedData?.productName || "Planta Identificada") : "Planta Identificada",

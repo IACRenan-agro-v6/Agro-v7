@@ -46,6 +46,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({ message, isPlaying, onToggleA
                   src={message.attachment.url} 
                   alt="Anexo do usuário" 
                   className="w-full h-auto max-h-60 object-cover" 
+                  onLoad={() => console.log('[ChatImage] message rendered with image')}
                 />
               ) : (
                 <video 

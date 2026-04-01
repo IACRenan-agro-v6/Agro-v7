@@ -138,14 +138,15 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         }
 
         setIsAttaching(true);
-        const rawBase64 = await fileToBase64(file);
-        const base64 = await compressImage(rawBase64);
+        const previewUrl = URL.createObjectURL(file);
+        console.log('[ChatImage] preview url created', previewUrl);
         
         setAttachment({
           type: 'image',
-          url: URL.createObjectURL(file),
-          base64,
-          mimeType: file.type
+          url: previewUrl,
+          base64: '', // Will be filled at send time
+          mimeType: file.type,
+          file: file
         });
         
         console.log('[ChatImage] preview ready');
@@ -163,29 +164,30 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
     try {
       if (e.target.files && e.target.files[0]) {
         const file = e.target.files[0];
-        console.log('[ImageInput] file selected', file.name);
-        console.log('[ImageInput] mimeType', file.type);
+        console.log('[ChatImage] file selected', file.name);
+        console.log('[ChatImage] mimeType', file.type);
 
         if (!file.type.startsWith('image/')) {
           toast.error('Por favor, selecione um arquivo de imagem válido.');
-          console.error('[Identify] error message: Invalid file type');
+          console.error('[Identify] error: Invalid file type');
           return;
         }
 
-        const rawBase64 = await fileToBase64(file);
-        const base64 = await compressImage(rawBase64);
+        const previewUrl = URL.createObjectURL(file);
+        console.log('[ChatImage] preview url created', previewUrl);
         
         setAttachment({
           type: 'image',
-          url: URL.createObjectURL(file),
-          base64,
-          mimeType: file.type
+          url: previewUrl,
+          base64: '', // Will be filled at send time
+          mimeType: file.type,
+          file: file
         });
         setIsPlantIdFlow(true);
-        console.log('[ImageInput] preview ready');
+        console.log('[ChatImage] preview ready');
       }
     } catch (err) {
-      console.error('[Identify] error message:', err);
+      console.error('[Identify] error:', err);
       toast.error('Erro ao processar imagem. Tente novamente.');
     } finally {
       if (e.target) e.target.value = '';
@@ -220,23 +222,23 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
   const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (e.target.files && e.target.files[0]) {
-        console.log('Capturando imagem da câmera nativa...');
         const file = e.target.files[0];
-        const rawBase64 = await fileToBase64(file);
-        const base64 = await compressImage(rawBase64);
+        console.log('[ChatImage] file selected (camera)', file.name);
         
-        console.log('[Camera] upload/request started', { size: file.size, type: file.type });
+        const previewUrl = URL.createObjectURL(file);
+        console.log('[ChatImage] preview url created', previewUrl);
         
         setAttachment({
           type: 'image',
-          url: URL.createObjectURL(file),
-          base64,
-          mimeType: 'image/jpeg'
+          url: previewUrl,
+          base64: '', // Will be filled at send time
+          mimeType: file.type || 'image/jpeg',
+          file: file
         });
-        console.log('Imagem capturada e comprimida com sucesso.');
+        console.log('[ChatImage] preview ready');
       }
     } catch (err) {
-      console.error('Erro ao capturar da câmera:', err);
+      console.error('[Identify] error:', err);
       toast.error('Ocorreu um erro ao processar a imagem da câmera. Tente de novo.');
     } finally {
       if (cameraInputRef.current) cameraInputRef.current.value = '';
@@ -245,31 +247,25 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
 
   const handleModalCapture = async (base64: string) => {
     try {
-      console.log('Imagem capturada via modal...');
+      console.log('[ChatImage] capture received (modal)');
       const compressedBase64 = await compressImage(base64);
+      const url = `data:image/jpeg;base64,${compressedBase64}`;
+      console.log('[ChatImage] preview url created (data url)', url.substring(0, 50) + '...');
       
-      console.log('[Camera] upload/request started', { length: compressedBase64.length });
-
+      setAttachment({
+        type: 'image',
+        url: url,
+        base64: compressedBase64,
+        mimeType: 'image/jpeg'
+      });
+      
       if (cameraMode === 'plant') {
-        console.log('[Identify] capture received (modal)');
-        const att: Attachment = {
-          type: 'image',
-          url: `data:image/jpeg;base64,${compressedBase64}`,
-          base64: compressedBase64,
-          mimeType: 'image/jpeg'
-        };
-        onSendMessage("Opa, companheiro! Dá uma olhada nessa planta aqui pra mim. Me diz o nome dela, se ela tá com alguma praga ou doença, se é tóxica pros bicho e o que eu devo fazer pra cuidar dela direitinho.", att);
-      } else {
-        setAttachment({
-          type: 'image',
-          url: `data:image/jpeg;base64,${compressedBase64}`,
-          base64: compressedBase64,
-          mimeType: 'image/jpeg'
-        });
+        setIsPlantIdFlow(true);
       }
-      console.log('Imagem do modal processada com sucesso.');
+      
+      console.log('[ChatImage] preview ready');
     } catch (err) {
-      console.error('Erro ao processar imagem do modal:', err);
+      console.error('[Identify] error:', err);
       toast.error('Erro ao processar a foto. Tente novamente.');
     }
   };
@@ -292,26 +288,24 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
   const handlePlantIdSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
       if (e.target.files && e.target.files[0]) {
-        console.log('Processando imagem para identificação de planta...');
         const file = e.target.files[0];
-        const rawBase64 = await fileToBase64(file);
-        const base64 = await compressImage(rawBase64);
+        console.log('[ChatImage] file selected (plant id)', file.name);
         
-        console.log('[Identify] capture received (native)', { size: file.size });
-        console.log('[Camera] upload/request started', { size: file.size, type: file.type });
-
-        const att: Attachment = {
+        const previewUrl = URL.createObjectURL(file);
+        console.log('[ChatImage] preview url created', previewUrl);
+        
+        setAttachment({
           type: 'image',
-          url: URL.createObjectURL(file),
-          base64,
-          mimeType: 'image/jpeg'
-        };
-
-        onSendMessage("Opa, companheiro! Dá uma olhada nessa planta aqui pra mim. Me diz o nome dela, se ela tá com alguma praga ou doença, se é tóxica pros bicho e o que eu devo fazer pra cuidar dela direitinho.", att);
-        console.log('Solicitação de identificação enviada.');
+          url: previewUrl,
+          base64: '', // Will be filled at send time
+          mimeType: file.type || 'image/jpeg',
+          file: file
+        });
+        setIsPlantIdFlow(true);
+        console.log('[ChatImage] preview ready');
       }
     } catch (err) {
-      console.error('Erro ao identificar planta:', err);
+      console.error('[Identify] error:', err);
       toast.error('Ocorreu um erro ao processar a identificação da planta. Tente de novo.');
     } finally {
       if (plantIdInputRef.current) plantIdInputRef.current.value = '';
@@ -361,14 +355,6 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         capture="environment"
         onChange={handleUnifiedImageSelect}
       />
-      <input 
-        type="file" 
-        ref={plantIdInputRef} 
-        className="hidden" 
-        accept="image/*"
-        capture="environment"
-        onChange={handlePlantIdSelect}
-      />
 
       <CameraModal 
         isOpen={isCameraModalOpen} 
@@ -380,7 +366,12 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         <div className="absolute -top-36 left-4 right-4 bg-white p-3 rounded-2xl border border-stone-200 shadow-xl flex items-center gap-4 animate-fade-in z-30">
            {attachment.type === 'image' ? (
              <div className="relative group">
-               <img src={attachment.url} className="h-24 w-24 object-cover rounded-xl shadow-sm border border-stone-100" alt="Preview" />
+               <img 
+                 src={attachment.url} 
+                 className="h-24 w-24 object-cover rounded-xl shadow-sm border border-stone-100" 
+                 alt="Preview" 
+                 onLoad={() => console.log('[ChatImage] preview rendered')}
+               />
                {isAttaching && (
                  <div className="absolute inset-0 bg-black/20 rounded-xl flex items-center justify-center">
                    <Loader2 size={20} className="text-white animate-spin" />

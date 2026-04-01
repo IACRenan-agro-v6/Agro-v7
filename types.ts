@@ -52,6 +52,7 @@ export interface Attachment {
   url: string; // Blob URL for preview
   base64: string; // Base64 data for API
   mimeType: string;
+  file?: File; // Original file object
 }
 
 export interface UserLocation {
