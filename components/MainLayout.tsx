@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { Menu, WifiOff, RefreshCw } from 'lucide-react';
+import { Menu, WifiOff, RefreshCw, ArrowLeft } from 'lucide-react';
 import Sidebar from './Sidebar';
 import ErrorBoundary from './ErrorBoundary';
 import { useAuth } from '../contexts/AuthContext';
@@ -69,6 +69,18 @@ const MainLayout: React.FC = () => {
           <span className="text-farm-900 font-bold text-lg tracking-tight">{getHeaderTitle()}</span>
           <div className="w-6" />
         </div>
+
+        {view !== 'chat' && (
+          <div className="p-4 border-b border-stone-200 bg-white shrink-0">
+            <button
+              onClick={() => setView('chat')}
+              className="flex items-center gap-2 text-sm font-bold text-farm-700 hover:text-farm-900"
+            >
+              <ArrowLeft size={16} />
+              Voltar ao Assistente
+            </button>
+          </div>
+        )}
 
         <div className="flex-1 h-full overflow-hidden">
           <Outlet />

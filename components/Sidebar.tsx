@@ -1,6 +1,5 @@
 
 import React from 'react';
-import { NavLink } from 'react-router-dom';
 import { 
   Bot, 
   LayoutDashboard, 
@@ -27,6 +26,7 @@ import {
   Flower2
 } from 'lucide-react';
 import { WeatherInfo, ViewMode, UserRole } from '../types';
+import { useNavigation } from '../hooks/useNavigation';
 
 interface SidebarProps {
   isSidebarOpen: boolean;
@@ -111,39 +111,35 @@ const Sidebar: React.FC<SidebarProps> = ({
   isSidebarOpen, setIsSidebarOpen, 
   isSidebarCollapsed, setIsSidebarCollapsed, userLocation, weatherInfo, userRole, onLogout
 }) => {
+  const { view, setView } = useNavigation();
 
-  const NavItem = ({ mode, icon: Icon, label }: { mode: ViewMode, icon: any, label: string }) => {
-    let path = mode as string;
-    if (mode === 'retail_insights') path = 'retail-insights';
-    if (mode === 'consumer_hub') path = 'consumer-hub';
-    if (mode === 'professional_hub') path = 'professional-hub';
+  const NavItem = ({ mode, icon: Icon, label }: { mode: ViewMode | 'registry', icon: any, label: string }) => {
+    const isActive = view === mode;
 
     return (
-      <NavLink 
-        to={`/${path}`}
-        onClick={() => setIsSidebarOpen(false)}
-        className={({ isActive }) => `w-full flex items-center gap-4 p-3 rounded-2xl transition-all font-medium group ${
+      <button 
+        onClick={() => {
+          setIsSidebarOpen(false);
+          setView(mode);
+        }}
+        className={`w-full flex items-center gap-4 p-3 rounded-2xl transition-all font-medium group ${
           isActive
           ? 'bg-white dark:bg-stone-800 shadow-sm border border-stone-100 dark:border-stone-700' 
           : 'hover:bg-white/50 dark:hover:bg-stone-800/50 border border-transparent hover:border-stone-100 dark:hover:border-stone-700'
         } ${isSidebarCollapsed ? 'justify-center' : ''}`}
         title={isSidebarCollapsed ? label : undefined}
       >
-        {({ isActive }) => (
+        <PremiumIcon icon={Icon} mode={mode as ViewMode} isActive={isActive} />
+        
+        {!isSidebarCollapsed && (
           <>
-            <PremiumIcon icon={Icon} mode={mode as ViewMode} isActive={isActive} />
-            
-            {!isSidebarCollapsed && (
-              <>
-                <span className={`text-sm tracking-wide transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${isActive ? 'text-stone-900 font-bold' : 'text-stone-500 group-hover:text-stone-800'}`}>
-                  {label}
-                </span>
-                {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-farm-500 flex-shrink-0"></div>}
-              </>
-            )}
+            <span className={`text-sm tracking-wide transition-colors whitespace-nowrap overflow-hidden text-ellipsis ${isActive ? 'text-stone-900 font-bold' : 'text-stone-500 group-hover:text-stone-800'}`}>
+              {label}
+            </span>
+            {isActive && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-farm-500 flex-shrink-0"></div>}
           </>
         )}
-      </NavLink>
+      </button>
     );
   };
 

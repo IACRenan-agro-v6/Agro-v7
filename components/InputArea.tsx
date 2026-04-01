@@ -249,33 +249,38 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
 
   const handleCameraCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
     try {
-      if (e.target.files && e.target.files[0]) {
-        const file = e.target.files[0];
-        console.log(`[ImageInput] file selected: ${file.name} (tipo: ${file.type}, tamanho: ${Math.round(file.size / 1024)}KB)`);
-        
-        const previewUrl = URL.createObjectURL(file);
-        console.log(`[ImageInput] preview ready: ${previewUrl}`);
-        
-        setAttachment({
-          type: 'image',
-          url: previewUrl,
-          base64: '',
-          mimeType: file.type || 'image/jpeg',
-          file: file
-        });
-
-        fileToBase64(file).then(base64 => {
-          console.log(`[ImageInput] base64 ready: data:${file.type};base64,${base64.substring(0, 30)}...`);
-          setAttachment(prev => prev ? { ...prev, base64 } : null);
-        }).catch(err => {
-          console.error('[ImageInput] base64 error:', err);
-        });
+      const file = e.target.files?.[0];
+      if (!file || !file.type.startsWith('image/')) {
+        console.log('[ImageInput] invalid file');
+        return;
       }
+
+      console.log(`[ImageInput] file selected: ${file.name} (tipo: ${file.type}, tamanho: ${(file.size/1024/1024).toFixed(1)}MB)`);
+      
+      const previewUrl = URL.createObjectURL(file);
+      console.log('[ImageInput] preview ready:', previewUrl);
+      
+      const tempAttachment: Attachment = {
+        type: 'image',
+        url: previewUrl,
+        base64: '',
+        mimeType: file.type || 'image/jpeg',
+        file: file
+      };
+
+      setAttachment(tempAttachment);
+
+      fileToBase64(file).then(base64 => {
+        console.log('[ImageInput] base64 ready:', base64.substring(0, 50));
+        setAttachment(prev => prev ? { ...prev, base64 } : null);
+      }).catch(err => {
+        console.error('[ImageInput] base64 error:', err);
+      });
     } catch (err) {
       console.error('[ImageInput] preview error:', err);
       toast.error('Ocorreu um erro ao processar a imagem da câmera. Tente de novo.');
     } finally {
-      if (cameraInputRef.current) cameraInputRef.current.value = '';
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -514,10 +519,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
                     <Paperclip size={22} />
                 </button>
                 <button 
-                    onClick={() => {
-                      setCameraMode('general');
-                      plantIdInputRef.current?.click();
-                    }}
+                    onClick={() => cameraInputRef.current?.click()}
                     className="p-3 text-stone-400 hover:text-farm-600 transition-colors rounded-full hover:bg-stone-50"
                     title="Tirar foto"
                 >
