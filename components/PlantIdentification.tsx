@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Upload, X, Leaf, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { identifyPlant, PlantIdentificationResult } from '../services/geminiService';
 
@@ -10,23 +10,48 @@ const PlantIdentification: React.FC = () => {
   const [result, setResult] = useState<PlantIdentificationResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    return () => {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+    };
+  }, [imagePreview]);
+
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      console.log('Imagem selecionada:', file.name, file.type, file.size);
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      console.log('[ImageInput] invalid file');
+      return;
+    }
+
+    console.log(`[ImageInput] file selected: ${file.name}`);
+
+    try {
+      if (imagePreview) {
+        URL.revokeObjectURL(imagePreview);
+      }
+
+      const previewUrl = URL.createObjectURL(file);
+      console.log(`[ImageInput] preview ready: ${previewUrl}`);
+      
+      setImagePreview(previewUrl);
       setSelectedFile(file);
       setError(null);
       setResult(null);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+    } catch (err) {
+      console.log('[ImageInput] preview error');
+      setError('Erro ao gerar preview da imagem.');
     }
   };
 
   const handleRemoveImage = () => {
-    console.log('Imagem removida');
+    console.log('[ImageInput] remove image');
+    if (imagePreview) {
+      URL.revokeObjectURL(imagePreview);
+    }
     setImagePreview(null);
     setSelectedFile(null);
     setError(null);
@@ -37,7 +62,7 @@ const PlantIdentification: React.FC = () => {
   };
 
   const handleIdentify = async () => {
-    if (!selectedFile || !imagePreview) return;
+    if (!selectedFile) return;
     
     console.log('Botão Identificar clicado. Imagem pronta para envio.');
     setIsLoading(true);
@@ -45,10 +70,17 @@ const PlantIdentification: React.FC = () => {
     setResult(null);
 
     try {
-      // Extract base64 data (remove the data:image/jpeg;base64, part)
-      const base64Data = imagePreview.split(',')[1];
-      const mimeType = selectedFile.type;
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const result = reader.result as string;
+          resolve(result.split(',')[1]);
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(selectedFile);
+      });
 
+      const mimeType = selectedFile.type;
       const identificationResult = await identifyPlant(base64Data, mimeType);
       setResult(identificationResult);
     } catch (err: any) {
@@ -115,9 +147,9 @@ const PlantIdentification: React.FC = () => {
 
           <button
             onClick={handleIdentify}
-            disabled={!imagePreview || isLoading}
+            disabled={!selectedFile || isLoading}
             className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all ${
-              imagePreview && !isLoading
+              selectedFile && !isLoading
                 ? 'bg-farm-600 text-white hover:bg-farm-700 shadow-md hover:shadow-lg' 
                 : 'bg-stone-200 text-stone-400 cursor-not-allowed'
             }`}
