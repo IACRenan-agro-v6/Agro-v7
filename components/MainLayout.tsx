@@ -34,7 +34,7 @@ const MainLayout: React.FC = () => {
   return (
     <ErrorBoundary>
       <Toaster position="top-center" richColors />
-      <div className={`flex h-screen w-full relative overflow-hidden font-sans animate-fade-in ${isDarkMode ? 'bg-stone-950 text-stone-100' : 'bg-white text-stone-900'}`}>
+      <div className={`flex h-screen w-full relative overflow-hidden overscroll-contain font-sans animate-fade-in ${isDarkMode ? 'bg-stone-950 text-stone-100' : 'bg-white text-stone-900'}`}>
       
       {!isOnline && (
         <div className="fixed top-0 left-0 right-0 bg-red-600 text-white py-1 px-4 text-center text-xs font-bold z-[100] flex items-center justify-center gap-2 animate-slide-down">

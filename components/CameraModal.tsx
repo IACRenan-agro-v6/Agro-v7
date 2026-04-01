@@ -18,56 +18,105 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
   const [isLoading, setIsLoading] = useState(true);
 
   const startCamera = async () => {
+    if (!isOpen) return;
+    console.log("[CameraModal] Camera start requested", { facingMode });
     setIsLoading(true);
+    setIsReady(false);
+    
     try {
       if (stream) {
+        console.log("[CameraModal] Stopping existing stream tracks before restart");
         stream.getTracks().forEach(track => track.stop());
       }
 
-      const newStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facingMode },
-        audio: false
-      });
+      let newStream: MediaStream;
       
+      try {
+        console.log("[CameraModal] Attempting getUserMedia with ideal facingMode:", facingMode);
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: { 
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+      } catch (fallbackErr) {
+        console.warn("[CameraModal] Ideal facingMode failed, using fallback:", fallbackErr);
+        console.log("[CameraModal] Fallback camera mode used: { video: true }");
+        newStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+      }
+      
+      console.log("[CameraModal] Camera permission granted and stream obtained");
+
       if (videoRef.current) {
-        console.log("[CameraModal] Setting srcObject and calling play()");
-        videoRef.current.srcObject = newStream;
-        try {
-          await videoRef.current.play();
-        } catch (playErr) {
-          console.warn("[CameraModal] Auto-play failed, might need user interaction:", playErr);
-        }
-        setStream(newStream);
-        setIsReady(true);
+        const video = videoRef.current;
+        
+        // Set attributes BEFORE srcObject
+        video.autoplay = true;
+        video.muted = true;
+        video.playsInline = true;
+        video.setAttribute('playsinline', 'true');
+        video.setAttribute('webkit-playsinline', 'true');
+        
+        console.log("[CameraModal] Attaching stream to video element");
+        video.srcObject = newStream;
+        
+        video.onloadedmetadata = async () => {
+          console.log("[CameraModal] Video metadata loaded, attempting play()");
+          try {
+            await video.play();
+            console.log("[CameraModal] Video playing successfully");
+            setStream(newStream);
+            setIsReady(true);
+            setIsLoading(false);
+          } catch (playErr) {
+            console.error("[CameraModal] Error playing video:", playErr);
+            toast.error("Erro ao iniciar reprodução do vídeo.");
+            setIsLoading(false);
+          }
+        };
       }
     } catch (err: any) {
-      console.error("Erro ao acessar câmera:", err);
+      console.error("[CameraModal] Camera access error:", err);
       const msg = err.name === 'NotAllowedError' 
         ? "Permissão de câmera negada. Por favor, ative nas configurações do navegador." 
-        : "Não foi possível acessar a câmera. Verifique se outro app não está usando ela.";
+        : "Não foi possível acessar a câmera. Verifique as permissões.";
       toast.error(msg);
       onClose();
-    } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
     if (isOpen) {
-      startCamera();
+      // Small delay to ensure DOM is ready and it's a direct result of user action (modal opening)
+      const timer = setTimeout(() => {
+        startCamera();
+      }, 100);
+      return () => clearTimeout(timer);
     } else {
       if (stream) {
+        console.log("[CameraModal] Closing modal, stopping tracks");
         stream.getTracks().forEach(track => track.stop());
         setStream(null);
       }
       setIsReady(false);
     }
+  }, [isOpen, facingMode]);
+
+  useEffect(() => {
+    // Final cleanup only on unmount
     return () => {
       if (stream) {
+        console.log("[CameraModal] Component unmounting, stopping tracks");
         stream.getTracks().forEach(track => track.stop());
       }
     };
-  }, [isOpen, facingMode]);
+  }, []);
 
   const captureImage = () => {
     if (videoRef.current && canvasRef.current) {
@@ -126,6 +175,7 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
             autoPlay 
             playsInline 
             muted
+            webkit-playsinline="true"
             className={`w-full h-full object-cover transition-opacity duration-500 ${isReady ? 'opacity-100' : 'opacity-0'}`}
           />
           <canvas ref={canvasRef} className="hidden" />
