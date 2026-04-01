@@ -17,10 +17,12 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
   const [recordingTime, setRecordingTime] = useState(0);
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [cameraMode, setCameraMode] = useState<'general' | 'plant'>('general');
+  const [isPlantIdFlow, setIsPlantIdFlow] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const plantIdInputRef = useRef<HTMLInputElement>(null);
+  const unifiedPlantInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -114,6 +116,49 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
     onSendMessage(inputText, attachment || undefined);
     setInputText('');
     setAttachment(null);
+    setIsPlantIdFlow(false);
+  };
+
+  const handleUnifiedImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        console.log('[ImageInput] file selected', file.name);
+        console.log('[ImageInput] mimeType', file.type);
+
+        if (!file.type.startsWith('image/')) {
+          toast.error('Por favor, selecione um arquivo de imagem válido.');
+          console.error('[Identify] error message: Invalid file type');
+          return;
+        }
+
+        const rawBase64 = await fileToBase64(file);
+        const base64 = await compressImage(rawBase64);
+        
+        setAttachment({
+          type: 'image',
+          url: URL.createObjectURL(file),
+          base64,
+          mimeType: file.type
+        });
+        setIsPlantIdFlow(true);
+        console.log('[ImageInput] preview ready');
+      }
+    } catch (err) {
+      console.error('[Identify] error message:', err);
+      toast.error('Erro ao processar imagem. Tente novamente.');
+    } finally {
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const triggerIdentification = () => {
+    if (!attachment || attachment.type !== 'image') return;
+    
+    console.log('[Identify] request started');
+    onSendMessage("Opa, companheiro! Dá uma olhada nessa planta aqui pra mim. Me diz o nome dela, se ela tá com alguma praga ou doença, se é tóxica pros bicho e o que eu devo fazer pra cuidar dela direitinho.", attachment);
+    setAttachment(null);
+    setIsPlantIdFlow(false);
   };
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -268,6 +313,14 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         capture="environment"
         onChange={handlePlantIdSelect}
       />
+      <input 
+        type="file" 
+        ref={unifiedPlantInputRef} 
+        className="hidden" 
+        accept="image/*"
+        capture="environment"
+        onChange={handleUnifiedImageSelect}
+      />
 
       <CameraModal 
         isOpen={isCameraModalOpen} 
@@ -276,29 +329,53 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       />
 
       {attachment && (
-        <div className="absolute -top-24 left-4 bg-white p-2 rounded-xl border border-stone-200 shadow-lg flex items-start gap-2 animate-fade-in z-30">
+        <div className="absolute -top-32 left-4 right-4 bg-white p-3 rounded-2xl border border-stone-200 shadow-xl flex items-center gap-4 animate-fade-in z-30">
            {attachment.type === 'image' ? (
-             <img src={attachment.url} className="h-20 w-20 object-cover rounded-lg" alt="Preview" />
+             <img src={attachment.url} className="h-20 w-20 object-cover rounded-xl shadow-sm" alt="Preview" />
            ) : attachment.type === 'video' ? (
-             <div className="h-20 w-20 bg-stone-100 rounded-lg flex items-center justify-center">
+             <div className="h-20 w-20 bg-stone-100 rounded-xl flex items-center justify-center">
                <Video size={24} className="text-stone-400"/>
              </div>
            ) : (
-             <div className="h-20 w-20 bg-blue-50 rounded-lg flex items-center justify-center">
+             <div className="h-20 w-20 bg-blue-50 rounded-xl flex items-center justify-center">
                <Mic size={24} className="text-blue-500"/>
              </div>
            )}
-           <div className="flex flex-col">
-             <span className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">
-               {attachment.type === 'image' ? 'Imagem' : attachment.type === 'video' ? 'Vídeo' : 'Áudio'}
+           <div className="flex-1 flex flex-col gap-1">
+             <span className="text-[10px] text-stone-400 font-black uppercase tracking-widest">
+               {attachment.type === 'image' ? 'Imagem Selecionada' : attachment.type === 'video' ? 'Vídeo Selecionado' : 'Áudio Gravado'}
              </span>
-             <button 
-               onClick={() => setAttachment(null)}
-               className="text-red-500 text-xs hover:underline"
-             >
-               Remover
-             </button>
+             <div className="flex items-center gap-2">
+                <button 
+                  onClick={() => {
+                    setAttachment(null);
+                    setIsPlantIdFlow(false);
+                  }}
+                  className="text-red-500 text-xs font-bold hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  <Trash2 size={12} /> Remover
+                </button>
+                {isPlantIdFlow && attachment.type === 'image' && (
+                  <button 
+                    onClick={triggerIdentification}
+                    disabled={isLoading}
+                    className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md hover:bg-blue-700 transition-all flex items-center gap-2"
+                  >
+                    {isLoading ? <Loader2 size={14} className="animate-spin" /> : <ScanEye size={14} />}
+                    IDENTIFICAR PLANTA
+                  </button>
+                )}
+             </div>
            </div>
+           <button 
+             onClick={() => {
+               setAttachment(null);
+               setIsPlantIdFlow(false);
+             }}
+             className="p-2 text-stone-300 hover:text-stone-500"
+           >
+             <X size={20} />
+           </button>
         </div>
       )}
 
@@ -373,36 +450,42 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         </div>
 
          {/* Quick Actions for Producer Assistant */}
-        <div className="flex justify-center gap-4 mt-4">
+        <div className="flex flex-col md:flex-row justify-center gap-3 mt-4">
            <button 
-             onClick={() => openCamera('general')} 
-             className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-stone-50 hover:bg-farm-50 border border-stone-100 hover:border-farm-200 transition-all group min-w-[80px]"
+             onClick={() => unifiedPlantInputRef.current?.click()} 
+             className="flex-1 flex items-center gap-4 p-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white transition-all shadow-lg shadow-blue-600/20 group"
            >
-              <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
-                <Camera size={20} className="text-stone-500 group-hover:text-farm-600" />
+              <div className="p-3 bg-white/20 rounded-xl backdrop-blur-sm group-hover:scale-110 transition-transform">
+                <Camera size={24} className="text-white" />
               </div>
-              <span className="text-[10px] font-bold text-stone-500 group-hover:text-farm-700 uppercase tracking-tight">Câmera</span>
+              <div className="flex flex-col items-start">
+                <span className="text-sm font-black uppercase tracking-tight">Tirar ou enviar foto da planta</span>
+                <span className="text-[10px] font-medium text-blue-100 opacity-80">Identificação instantânea por IA</span>
+              </div>
            </button>
 
-           <button 
-             onClick={() => openCamera('plant')} 
-             className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-stone-50 hover:bg-blue-50 border border-stone-100 hover:border-blue-200 transition-all group min-w-[80px]"
-           >
-              <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
-                <ScanEye size={20} className="text-stone-500 group-hover:text-blue-600" />
-              </div>
-              <span className="text-[10px] font-bold text-stone-500 group-hover:text-blue-700 uppercase tracking-tight">Identificar</span>
-           </button>
+           <div className="flex gap-3">
+             <button 
+               onClick={() => openCamera('general')} 
+               className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-stone-50 hover:bg-farm-50 border border-stone-100 hover:border-farm-200 transition-all group min-w-[80px]"
+               title="Câmera Secundária"
+             >
+                <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
+                  <Video size={20} className="text-stone-500 group-hover:text-farm-600" />
+                </div>
+                <span className="text-[10px] font-bold text-stone-500 group-hover:text-farm-700 uppercase tracking-tight">Webcam</span>
+             </button>
 
-           <button 
-             onClick={handleFieldNote} 
-             className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-stone-50 hover:bg-amber-50 border border-stone-100 hover:border-amber-200 transition-all group min-w-[80px]"
-           >
-              <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
-                <ClipboardList size={20} className="text-stone-500 group-hover:text-amber-600" />
-              </div>
-              <span className="text-[10px] font-bold text-stone-500 group-hover:text-amber-700 uppercase tracking-tight">Anotar</span>
-           </button>
+             <button 
+               onClick={handleFieldNote} 
+               className="flex flex-col items-center gap-1.5 p-3 rounded-2xl bg-stone-50 hover:bg-amber-50 border border-stone-100 hover:border-amber-200 transition-all group min-w-[80px]"
+             >
+                <div className="p-2 bg-white rounded-full shadow-sm group-hover:scale-110 transition-transform">
+                  <ClipboardList size={20} className="text-stone-500 group-hover:text-amber-600" />
+                </div>
+                <span className="text-[10px] font-bold text-stone-500 group-hover:text-amber-700 uppercase tracking-tight">Anotar</span>
+             </button>
+           </div>
         </div>
       </div>
 

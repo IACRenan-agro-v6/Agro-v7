@@ -544,7 +544,7 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
 
   } catch (error: any) {
     const errorStatus = error?.status || error?.code || 'N/A';
-    console.error(`[Identify] error status/message: ${errorStatus} / ${error?.message}`);
+    console.error(`[Identify] error message: ${errorStatus} / ${error?.message}`);
     return null;
   }
 }
