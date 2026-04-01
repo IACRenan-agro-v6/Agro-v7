@@ -57,7 +57,9 @@ const App: React.FC = () => {
   const { 
     isAuthenticated, 
     isAuthLoading, 
+    isAuthTimeout,
     currentUser, 
+    userRole,
     login, 
     googleLogin, 
     register 
@@ -66,19 +68,6 @@ const App: React.FC = () => {
   const { isDarkMode, setIsDarkMode } = useTheme();
   const { setView } = useNavigation();
   const { userLocation } = useLocationWeather();
-
-  const [showFallback, setShowFallback] = React.useState(false);
-
-  useEffect(() => {
-    // If auth is still loading after 2 seconds, show the app shell anyway
-    const timer = setTimeout(() => {
-      if (isAuthLoading) {
-        console.log("[App] Auth loading timeout reached, showing app shell");
-        setShowFallback(true);
-      }
-    }, 2000);
-    return () => clearTimeout(timer);
-  }, [isAuthLoading]);
 
   // Log when dashboard is ready
   useEffect(() => {
@@ -133,7 +122,8 @@ const App: React.FC = () => {
     return <Navigate to={getLandingPage(userRole)} replace />;
   };
 
-  if (isAuthLoading && !showFallback) {
+  if (isAuthLoading && !isAuthTimeout) {
+    console.log("[App] rendering loading (isAuthLoading:", isAuthLoading, ")");
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-stone-50">
         <div className="relative">
@@ -148,6 +138,7 @@ const App: React.FC = () => {
     );
   }
 
+  console.log("[App] rendering routes shell (isAuthenticated:", isAuthenticated, ")");
   return (
     <>
       {!isSupabaseConfigured && (
@@ -158,7 +149,7 @@ const App: React.FC = () => {
       )}
       <Routes>
       <Route path="/login" element={
-        isAuthenticated ? <Navigate to="/chat" replace /> : (
+        isAuthenticated ? <Navigate to={getLandingPage(userRole)} replace /> : (
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <LoginScreen 
@@ -172,7 +163,7 @@ const App: React.FC = () => {
         )
       } />
       <Route path="/register" element={
-        isAuthenticated ? <Navigate to="/chat" replace /> : (
+        isAuthenticated ? <Navigate to={getLandingPage(userRole)} replace /> : (
           <Suspense fallback={<PageLoader />}>
             <RegistrationScreen 
               onBack={() => navigate('/login')}

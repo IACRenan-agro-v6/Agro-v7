@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 interface AuthContextType {
   isAuthenticated: boolean;
   isAuthLoading: boolean;
+  isAuthTimeout: boolean;
+  isProfileLoading: boolean;
   currentUser: UserProfile | null;
   userRole: UserRole;
   setUserRole: (role: UserRole) => void;
@@ -20,8 +22,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    const saved = localStorage.getItem('agro_isAuthenticated');
+    console.log("[AuthContext] Initial optimistic auth from localStorage:", saved === 'true');
+    return saved === 'true';
+  });
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const [isAuthTimeout, setIsAuthTimeout] = useState(false);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     const savedUser = localStorage.getItem('agro_currentUser');
     if (savedUser) {
@@ -112,30 +120,47 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const checkSession = async () => {
     console.log("[AuthContext] Checking session...");
     const sessionStart = performance.now();
+    
+    // Safety timeout for session check
+    const timeoutId = setTimeout(() => {
+      if (isAuthLoading) {
+        console.warn("[AuthContext] Session check timeout reached, releasing UI");
+        setIsAuthLoading(false);
+        setIsAuthTimeout(true);
+      }
+    }, 3000);
+
     try {
       const { data: { session } } = await supabase.auth.getSession();
+      clearTimeout(timeoutId);
+      
       console.log("[AuthContext] Session check took:", (performance.now() - sessionStart).toFixed(2), "ms");
       console.log("[AuthContext] Session found:", !!session);
       
       if (session?.user) {
         console.log("[AuthContext] session ready");
         setIsAuthenticated(true);
+        localStorage.setItem('agro_isAuthenticated', 'true');
         
         // Don't block auth loading for profile fetching
-        // We already have a cached user from localStorage if available
         setIsAuthLoading(false);
         
         // Fetch fresh profile in background
+        setIsProfileLoading(true);
+        console.log("[AuthContext] profile pending");
+        
         const roleToUse = (localStorage.getItem('agro_userRole') as UserRole) || userRole;
         fetchOrCreateProfile(session.user, roleToUse).then(profile => {
           console.log("[AuthContext] profile ready");
           setCurrentUser(profile);
           setUserRole(profile.role);
+          setIsProfileLoading(false);
           localStorage.setItem('agro_currentUser', JSON.stringify(profile));
           localStorage.setItem('agro_userRole', profile.role);
           console.timeEnd('app-bootstrap');
         }).catch(err => {
           console.error("[AuthContext] Background profile fetch failed:", err);
+          setIsProfileLoading(false);
           console.timeEnd('app-bootstrap');
         });
       } else {
@@ -143,10 +168,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsAuthenticated(false);
         setCurrentUser(null);
         setIsAuthLoading(false);
+        localStorage.removeItem('agro_isAuthenticated');
+        localStorage.removeItem('agro_currentUser');
         console.timeEnd('app-bootstrap');
       }
     } catch (error) {
       console.error("[AuthContext] Erro ao verificar sessão inicial:", error);
+      clearTimeout(timeoutId);
       setIsAuthLoading(false);
       console.timeEnd('app-bootstrap');
     }
@@ -159,6 +187,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.log("[AuthContext] onAuthStateChange event:", event);
       if (session?.user) {
         setIsAuthenticated(true);
+        localStorage.setItem('agro_isAuthenticated', 'true');
         
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           const roleToUse = (localStorage.getItem('agro_userRole') as UserRole) || userRole;
@@ -337,6 +366,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     <AuthContext.Provider value={{
       isAuthenticated,
       isAuthLoading,
+      isAuthTimeout,
+      isProfileLoading,
       currentUser,
       userRole,
       setUserRole,
