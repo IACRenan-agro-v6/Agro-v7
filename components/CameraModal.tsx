@@ -30,7 +30,13 @@ const CameraModal: React.FC<CameraModalProps> = ({ isOpen, onClose, onCapture })
       });
       
       if (videoRef.current) {
+        console.log("[CameraModal] Setting srcObject and calling play()");
         videoRef.current.srcObject = newStream;
+        try {
+          await videoRef.current.play();
+        } catch (playErr) {
+          console.warn("[CameraModal] Auto-play failed, might need user interaction:", playErr);
+        }
         setStream(newStream);
         setIsReady(true);
       }

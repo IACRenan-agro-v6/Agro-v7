@@ -365,6 +365,7 @@ export const getCEASAQuotes = async (searchTerm?: string, location?: string): Pr
     if (!apiKey) return [];
     const ai = new GoogleGenAI({ apiKey });
 
+    console.log('[getCEASAQuotes] Buscando cotações...', { searchTerm, location });
     const prompt = `Busque os preços reais e atualizados de hoje no CEASA ${location || 'do Rio de Janeiro (CEASA-RJ)'} para os principais produtos de hortifruti. 
     ${searchTerm ? `Foque especialmente no produto: ${searchTerm}.` : 'Inclua Tomate, Batata, Cebola, Cenoura, Pimentão, Alface.'}
     Retorne os dados em formato JSON seguindo o esquema fornecido. 
@@ -381,9 +382,14 @@ export const getCEASAQuotes = async (searchTerm?: string, location?: string): Pr
     }));
 
     const jsonText = response.text;
-    if (!jsonText) return [];
+    console.log('[getCEASAQuotes] Resposta bruta da IA:', jsonText);
+    if (!jsonText) {
+      console.warn('[getCEASAQuotes] Resposta vazia da IA');
+      return [];
+    }
     
     const quotes = JSON.parse(jsonText) as MarketQuote[];
+    console.log(`[getCEASAQuotes] ${quotes.length} cotações processadas.`);
     
     // Cache the results
     if (quotes.length > 0) {
@@ -462,6 +468,7 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
     if (!apiKey) return null;
     const ai = new GoogleGenAI({ apiKey });
 
+    console.log('[processUserTask] Iniciando processamento...', { textLength: text?.length, hasAttachment: !!attachment });
     const prompt = `Você é o assistente IA do IAC Farm, um sistema inteligente para o agronegócio. 
     Analise a entrada do usuário (que pode ser texto, imagem ou áudio) e identifique a intenção.
     
@@ -486,6 +493,7 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
 
     const contents: any[] = [{ text: prompt }];
     if (attachment) {
+      console.log('[processUserTask] Adicionando anexo multimodal...', { mimeType: attachment.mimeType });
       contents.push({
         inlineData: {
           mimeType: attachment.mimeType,
@@ -494,7 +502,6 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
       });
     }
 
-    console.log('Processando tarefa do usuário...', { textLength: text?.length, hasAttachment: !!attachment });
     const response = await withRetry(() => ai.models.generateContent({
       model: MODEL_NAME,
       contents: { parts: contents },
@@ -505,11 +512,14 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
     }));
 
     const jsonText = response.text;
-    console.log('Resposta da IA recebida:', jsonText);
-    if (!jsonText) return null;
+    console.log('[processUserTask] Resposta bruta da IA:', jsonText);
+    if (!jsonText) {
+      console.warn('[processUserTask] Resposta vazia da IA');
+      return null;
+    }
     
     const result = JSON.parse(jsonText) as AITaskResponse;
-    console.log('Intenção identificada:', result.intent, 'Confiança:', result.confidence);
+    console.log('[processUserTask] Intenção identificada:', result.intent, 'Confiança:', result.confidence);
     return result;
 
   } catch (error) {

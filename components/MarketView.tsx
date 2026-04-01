@@ -9,6 +9,7 @@ import {
   Truck, 
   Search, 
   Plus, 
+  RefreshCw,
   Calendar,
   ArrowRight,
   Info,
@@ -116,27 +117,37 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
   useEffect(() => {
     const fetchQuotes = async () => {
       setIsLoading(true);
-      const data = await getCEASAQuotes(searchTerm);
-      if (data && data.length > 0) {
-        setQuotes(data);
-      } else {
-        // Fallback to mock if API fails
-        const mockQuotes: MarketQuote[] = [
-          { product: 'Tomate Saladete', price: 85.00, unit: 'Cx 20kg', trend: 'up', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
-          { product: 'Batata Inglesa', price: 120.00, unit: 'Sc 50kg', trend: 'down', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
-          { product: 'Cebola Nacional', price: 65.00, unit: 'Sc 20kg', trend: 'stable', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
-          { product: 'Milho Verde', price: 55.00, unit: 'Sc 50un', trend: 'up', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
-          { product: 'Cenoura Especial', price: 45.00, unit: 'Cx 20kg', trend: 'up', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
-        ];
+      console.log("[MarketView] Buscando cotações...", { searchTerm, city: currentUser?.city });
+      try {
+        const data = await getCEASAQuotes(searchTerm, currentUser?.city || '');
+        console.log("[MarketView] Cotações recebidas:", data?.length || 0);
         
-        if (searchTerm) {
-          const filtered = mockQuotes.filter(q => q.product.toLowerCase().includes(searchTerm.toLowerCase()));
-          setQuotes(filtered.length > 0 ? filtered : mockQuotes);
+        if (data && data.length > 0) {
+          setQuotes(data);
         } else {
-          setQuotes(mockQuotes);
+          console.warn("[MarketView] Nenhuma cotação retornada pela API, usando mock data");
+          // Fallback to mock if API fails
+          const mockQuotes: MarketQuote[] = [
+            { product: 'Tomate Saladete', price: 85.00, unit: 'Cx 20kg', trend: 'up', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
+            { product: 'Batata Inglesa', price: 120.00, unit: 'Sc 50kg', trend: 'down', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
+            { product: 'Cebola Nacional', price: 65.00, unit: 'Sc 20kg', trend: 'stable', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
+            { product: 'Milho Verde', price: 55.00, unit: 'Sc 50un', trend: 'up', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
+            { product: 'Cenoura Especial', price: 45.00, unit: 'Cx 20kg', trend: 'up', lastUpdate: '13/03/2026', source: 'CEASA-RJ' },
+          ];
+          
+          if (searchTerm) {
+            const filtered = mockQuotes.filter(q => q.product.toLowerCase().includes(searchTerm.toLowerCase()));
+            setQuotes(filtered.length > 0 ? filtered : mockQuotes);
+          } else {
+            setQuotes(mockQuotes);
+          }
         }
+      } catch (error) {
+        console.error("[MarketView] Erro ao buscar cotações:", error);
+        toast.error("Erro ao carregar cotações");
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
     
     const timeoutId = setTimeout(() => {
@@ -144,7 +155,7 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
     }, 500); // Debounce search
     
     return () => clearTimeout(timeoutId);
-  }, [searchTerm]);
+  }, [searchTerm, currentUser?.city]);
 
   // Fetch offers
   useEffect(() => {
@@ -302,9 +313,25 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
                     onChange={(e) => setSearchTerm(e.target.value)}
                   />
                 </div>
-                <button className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-600 hover:bg-stone-50 transition-colors">
-                  <Filter size={20} />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => {
+                      // Trigger a fresh fetch by clearing quotes first or just calling the effect logic
+                      // Since it's in a useEffect with searchTerm, we can't easily call it directly
+                      // unless we expose it. But we can just use a state to trigger it.
+                      setSearchTerm(prev => prev + ' ');
+                      setTimeout(() => setSearchTerm(prev => prev.trim()), 10);
+                    }}
+                    disabled={isLoading}
+                    className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-600 hover:bg-stone-50 transition-colors disabled:opacity-50"
+                    title="Atualizar cotações"
+                  >
+                    <RefreshCw size={20} className={isLoading ? 'animate-spin' : ''} />
+                  </button>
+                  <button className="p-2.5 bg-white border border-stone-200 rounded-xl text-stone-600 hover:bg-stone-50 transition-colors">
+                    <Filter size={20} />
+                  </button>
+                </div>
               </div>
 
               {/* Quotes Table - Recipe 1 style */}
@@ -456,7 +483,7 @@ const MarketView: React.FC<MarketViewProps> = ({ currentUser, setView }) => {
                   <Filter size={18} />
                   Filtros
                 </button>
-                {currentUser?.role === UserRole.PRODUCER && (
+                {(currentUser?.role === UserRole.PRODUCER || currentUser?.role === UserRole.ADMIN) && (
                   <button 
                     onClick={() => setIsAddingOffer(true)}
                     className="flex items-center gap-2 px-6 py-3 bg-stone-900 text-white rounded-2xl font-bold text-sm hover:bg-stone-800 transition-all shadow-lg shadow-stone-200"

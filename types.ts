@@ -14,6 +14,8 @@ export interface UserProfile {
   fullName: string;
   document: string; // CPF or CNPJ
   phone?: string;
+  city?: string;
+  state?: string;
   createdAt: string;
   
   // Specific fields

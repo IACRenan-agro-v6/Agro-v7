@@ -9,14 +9,15 @@ interface ProtectedRouteProps {
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles }) => {
-  const { isAuthenticated, isAuthLoading, isAuthTimeout, userRole } = useAuth();
+  const { isAuthenticated, isAuthLoading, isAuthTimeout, isProfileLoading, userRole } = useAuth();
   const location = useLocation();
 
-  if (isAuthLoading && !isAuthTimeout) {
-    console.log("[ProtectedRoute] rendering loading");
+  if ((isAuthLoading && !isAuthTimeout) || (isAuthenticated && isProfileLoading)) {
+    console.log("[ProtectedRoute] rendering loading (auth or profile pending)");
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-stone-50">
         <div className="w-12 h-12 border-4 border-farm-100 border-t-farm-600 rounded-full animate-spin"></div>
+        <p className="mt-4 text-stone-500 font-medium animate-pulse">Carregando seu perfil...</p>
       </div>
     );
   }
