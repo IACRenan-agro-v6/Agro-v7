@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Send, Mic, Image as ImageIcon, Video, X, Loader2, ScanEye, Camera, ClipboardList, StopCircle, Trash2 } from 'lucide-react';
+import { Send, Mic, Image as ImageIcon, Video, X, Loader2, ScanEye, Camera, ClipboardList, StopCircle, Trash2, Paperclip } from 'lucide-react';
 import { Attachment } from '../types';
 import { fileToBase64, compressImage } from '../utils/fileUtils';
 import CameraModal from './CameraModal';
@@ -18,6 +18,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
   const [isCameraModalOpen, setIsCameraModalOpen] = useState(false);
   const [cameraMode, setCameraMode] = useState<'general' | 'plant'>('general');
   const [isPlantIdFlow, setIsPlantIdFlow] = useState(false);
+  const [isAttaching, setIsAttaching] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -113,10 +114,49 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
 
   const handleSend = () => {
     if (!inputText.trim() && !attachment) return;
+    
+    if (attachment && attachment.type === 'image') {
+      console.log('[ChatImage] send started');
+    }
+    
     onSendMessage(inputText, attachment || undefined);
     setInputText('');
     setAttachment(null);
     setIsPlantIdFlow(false);
+  };
+
+  const handleChatImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      if (e.target.files && e.target.files[0]) {
+        const file = e.target.files[0];
+        console.log('[ChatImage] file selected', file.name);
+        
+        if (!file.type.startsWith('image/')) {
+          toast.error('Por favor, selecione uma imagem.');
+          console.error('[Identify] error: Invalid file type');
+          return;
+        }
+
+        setIsAttaching(true);
+        const rawBase64 = await fileToBase64(file);
+        const base64 = await compressImage(rawBase64);
+        
+        setAttachment({
+          type: 'image',
+          url: URL.createObjectURL(file),
+          base64,
+          mimeType: file.type
+        });
+        
+        console.log('[ChatImage] preview ready');
+      }
+    } catch (err) {
+      console.error('[Identify] error:', err);
+      toast.error('Erro ao anexar imagem.');
+    } finally {
+      setIsAttaching(false);
+      if (e.target) e.target.value = '';
+    }
   };
 
   const handleUnifiedImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -295,7 +335,7 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         ref={fileInputRef} 
         className="hidden" 
         accept="image/*,video/*"
-        onChange={handleFileSelect}
+        onChange={handleChatImageSelect}
       />
       <input 
         type="file" 
@@ -321,6 +361,14 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
         capture="environment"
         onChange={handleUnifiedImageSelect}
       />
+      <input 
+        type="file" 
+        ref={plantIdInputRef} 
+        className="hidden" 
+        accept="image/*"
+        capture="environment"
+        onChange={handlePlantIdSelect}
+      />
 
       <CameraModal 
         isOpen={isCameraModalOpen} 
@@ -329,53 +377,74 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
       />
 
       {attachment && (
-        <div className="absolute -top-32 left-4 right-4 bg-white p-3 rounded-2xl border border-stone-200 shadow-xl flex items-center gap-4 animate-fade-in z-30">
+        <div className="absolute -top-36 left-4 right-4 bg-white p-3 rounded-2xl border border-stone-200 shadow-xl flex items-center gap-4 animate-fade-in z-30">
            {attachment.type === 'image' ? (
-             <img src={attachment.url} className="h-20 w-20 object-cover rounded-xl shadow-sm" alt="Preview" />
+             <div className="relative group">
+               <img src={attachment.url} className="h-24 w-24 object-cover rounded-xl shadow-sm border border-stone-100" alt="Preview" />
+               {isAttaching && (
+                 <div className="absolute inset-0 bg-black/20 rounded-xl flex items-center justify-center">
+                   <Loader2 size={20} className="text-white animate-spin" />
+                 </div>
+               )}
+             </div>
            ) : attachment.type === 'video' ? (
-             <div className="h-20 w-20 bg-stone-100 rounded-xl flex items-center justify-center">
+             <div className="h-24 w-24 bg-stone-100 rounded-xl flex items-center justify-center">
                <Video size={24} className="text-stone-400"/>
              </div>
            ) : (
-             <div className="h-20 w-20 bg-blue-50 rounded-xl flex items-center justify-center">
+             <div className="h-24 w-24 bg-blue-50 rounded-xl flex items-center justify-center">
                <Mic size={24} className="text-blue-500"/>
              </div>
            )}
+           
            <div className="flex-1 flex flex-col gap-1">
-             <span className="text-[10px] text-stone-400 font-black uppercase tracking-widest">
-               {attachment.type === 'image' ? 'Imagem Selecionada' : attachment.type === 'video' ? 'Vídeo Selecionado' : 'Áudio Gravado'}
-             </span>
              <div className="flex items-center gap-2">
+               <span className="text-[10px] text-stone-400 font-black uppercase tracking-widest">
+                 {attachment.type === 'image' ? 'Imagem para envio' : attachment.type === 'video' ? 'Vídeo Selecionado' : 'Áudio Gravado'}
+               </span>
+               {isLoading && (
+                 <span className="text-[10px] text-farm-600 font-bold animate-pulse">
+                   {attachment.type === 'image' ? 'Analisando imagem...' : 'Enviando...'}
+                 </span>
+               )}
+             </div>
+             
+             <div className="flex items-center gap-2 mt-1">
                 <button 
                   onClick={() => {
                     setAttachment(null);
                     setIsPlantIdFlow(false);
                   }}
-                  className="text-red-500 text-xs font-bold hover:bg-red-50 px-2 py-1 rounded-lg transition-colors flex items-center gap-1"
+                  disabled={isLoading}
+                  className="text-red-500 text-xs font-bold hover:bg-red-50 px-3 py-2 rounded-xl transition-colors flex items-center gap-1.5 border border-red-100"
                 >
-                  <Trash2 size={12} /> Remover
+                  <Trash2 size={14} /> Remover
                 </button>
+                
                 {isPlantIdFlow && attachment.type === 'image' && (
                   <button 
                     onClick={triggerIdentification}
-                    disabled={isLoading}
+                    disabled={isLoading || isAttaching}
                     className="bg-blue-600 text-white text-xs font-bold px-4 py-2 rounded-xl shadow-md hover:bg-blue-700 transition-all flex items-center gap-2"
                   >
                     {isLoading ? <Loader2 size={14} className="animate-spin" /> : <ScanEye size={14} />}
-                    IDENTIFICAR PLANTA
+                    IDENTIFICAR AGORA
                   </button>
                 )}
              </div>
            </div>
-           <button 
-             onClick={() => {
-               setAttachment(null);
-               setIsPlantIdFlow(false);
-             }}
-             className="p-2 text-stone-300 hover:text-stone-500"
-           >
-             <X size={20} />
-           </button>
+           
+           {!isLoading && (
+             <button 
+               onClick={() => {
+                 setAttachment(null);
+                 setIsPlantIdFlow(false);
+               }}
+               className="p-2 text-stone-300 hover:text-stone-500"
+             >
+               <X size={20} />
+             </button>
+           )}
         </div>
       )}
 
@@ -403,13 +472,25 @@ const InputArea: React.FC<InputAreaProps> = ({ onSendMessage, isLoading }) => {
             </div>
           ) : (
             <>
-              <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="p-3 text-stone-400 hover:text-farm-600 transition-colors rounded-full hover:bg-stone-50"
-                  title="Enviar Foto/Vídeo"
-              >
-                  <ImageIcon size={22} />
-              </button>
+              <div className="flex items-center">
+                <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="p-3 text-stone-400 hover:text-farm-600 transition-colors rounded-full hover:bg-stone-50"
+                    title="Anexar arquivo"
+                >
+                    <Paperclip size={22} />
+                </button>
+                <button 
+                    onClick={() => {
+                      setCameraMode('general');
+                      plantIdInputRef.current?.click();
+                    }}
+                    className="p-3 text-stone-400 hover:text-farm-600 transition-colors rounded-full hover:bg-stone-50"
+                    title="Tirar foto"
+                >
+                    <Camera size={22} />
+                </button>
+              </div>
 
               <div className="flex-1 relative">
                   <input
