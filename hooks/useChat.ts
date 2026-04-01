@@ -170,7 +170,10 @@ export const useChat = (userLocation: UserLocation | null, currentUser: UserProf
     } catch (error) {
        if (!isSyncingTask) {
          setMessages(prev => prev.filter(msg => msg.id !== thinkingId));
-         setMessages(prev => [...prev, { id: Date.now().toString(), role: MessageRole.ASSISTANT, content: "Opa, deu um problema na conexão.", timestamp: new Date() }]);
+         const errorMsg = attachment?.type === 'image' 
+           ? "Opa, companheiro! Tive um problema pra analisar essa foto agora. Pode tentar de novo ou me mandar outra?"
+           : "Opa, deu um problema na conexão. Tenta de novo daqui a pouco!";
+         setMessages(prev => [...prev, { id: Date.now().toString(), role: MessageRole.ASSISTANT, content: errorMsg, timestamp: new Date() }]);
        }
     } finally { setIsLoading(false); }
   };

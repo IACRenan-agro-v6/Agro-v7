@@ -148,9 +148,20 @@ export const sendMessageToGemini = async (
 
     // Fix: chat.sendMessage message property expects Part | Part[], not a Content object
     // Send the multimodal message with retry logic
+    if (attachment) {
+      console.log('[Identify] capture received (chat)', { textLength: textToSend?.length });
+      console.log('[Identify] mimeType', attachment.mimeType);
+      console.log('[Identify] payload prepared');
+      console.log('[Identify] request started');
+    }
+
     const result = await withRetry(() => chat.sendMessage({
         message: currentParts
     }));
+
+    if (attachment) {
+      console.log('[Identify] response success');
+    }
 
     return result.text || "Opa, deu um nó aqui e não consegui analisar. Pode repetir?";
 
@@ -465,10 +476,18 @@ const aiTaskSchema = {
 export const processUserTask = async (text: string, attachment?: { base64: string, mimeType: string }): Promise<AITaskResponse | null> => {
   try {
     const apiKey = getApiKey();
-    if (!apiKey) return null;
+    if (!apiKey) {
+      console.error("[Identify] API key missing");
+      return null;
+    }
     const ai = new GoogleGenAI({ apiKey });
 
-    console.log('[processUserTask] Iniciando processamento...', { textLength: text?.length, hasAttachment: !!attachment });
+    console.log('[Identify] capture received', { textLength: text?.length, hasAttachment: !!attachment });
+    
+    if (attachment) {
+      console.log('[Identify] mimeType', attachment.mimeType);
+    }
+
     const prompt = `Você é o assistente IA do IAC Farm, um sistema inteligente para o agronegócio. 
     Analise a entrada do usuário (que pode ser texto, imagem ou áudio) e identifique a intenção.
     
@@ -493,7 +512,6 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
 
     const contents: any[] = [{ text: prompt }];
     if (attachment) {
-      console.log('[processUserTask] Adicionando anexo multimodal...', { mimeType: attachment.mimeType });
       contents.push({
         inlineData: {
           mimeType: attachment.mimeType,
@@ -501,6 +519,9 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
         }
       });
     }
+
+    console.log('[Identify] payload prepared');
+    console.log('[Identify] request started');
 
     const response = await withRetry(() => ai.models.generateContent({
       model: MODEL_NAME,
@@ -512,18 +533,18 @@ export const processUserTask = async (text: string, attachment?: { base64: strin
     }));
 
     const jsonText = response.text;
-    console.log('[processUserTask] Resposta bruta da IA:', jsonText);
     if (!jsonText) {
-      console.warn('[processUserTask] Resposta vazia da IA');
+      console.warn('[Identify] response empty');
       return null;
     }
     
+    console.log('[Identify] response success');
     const result = JSON.parse(jsonText) as AITaskResponse;
-    console.log('[processUserTask] Intenção identificada:', result.intent, 'Confiança:', result.confidence);
     return result;
 
-  } catch (error) {
-    console.error("Erro ao processar tarefa do usuário:", error);
+  } catch (error: any) {
+    const errorStatus = error?.status || error?.code || 'N/A';
+    console.error(`[Identify] error status/message: ${errorStatus} / ${error?.message}`);
     return null;
   }
 }
