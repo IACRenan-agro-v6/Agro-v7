@@ -473,6 +473,79 @@ const aiTaskSchema = {
   required: ["intent", "confidence", "assistantMessage"]
 };
 
+export interface PlantIdentificationResult {
+  plantName: string;
+  healthStatus: string;
+  possibleProblems: string[];
+  recommendation: string;
+}
+
+const plantIdentificationSchema = {
+  type: Type.OBJECT,
+  properties: {
+    plantName: { type: Type.STRING, description: "Nome provável da planta (comum e científico)" },
+    healthStatus: { type: Type.STRING, description: "Estado de saúde geral da planta" },
+    possibleProblems: { 
+      type: Type.ARRAY, 
+      items: { type: Type.STRING },
+      description: "Lista de possíveis problemas (pragas, doenças, deficiências)" 
+    },
+    recommendation: { type: Type.STRING, description: "Recomendação prática de cuidados ou tratamento" }
+  },
+  required: ["plantName", "healthStatus", "possibleProblems", "recommendation"]
+};
+
+export const identifyPlant = async (base64Image: string, mimeType: string): Promise<PlantIdentificationResult> => {
+  try {
+    const apiKey = getApiKey();
+    if (!apiKey) {
+      throw new Error("API key missing");
+    }
+    const ai = new GoogleGenAI({ apiKey });
+
+    console.log('[Identify] mimeType', mimeType);
+    console.log('[Identify] request started');
+
+    const prompt = `Analise esta imagem de uma planta e forneça:
+    1. O nome provável da planta (comum e científico se possível).
+    2. O estado de saúde aparente.
+    3. Possíveis problemas (pragas, doenças, deficiências nutricionais) visíveis.
+    4. Uma recomendação prática de cuidado ou tratamento.
+    Responda em português de forma clara e objetiva.`;
+
+    const response = await withRetry(() => ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: {
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              mimeType,
+              data: base64Image
+            }
+          }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: plantIdentificationSchema,
+      }
+    }));
+
+    const jsonText = response.text;
+    if (!jsonText) {
+      throw new Error("Empty response from Gemini");
+    }
+    
+    console.log('[Identify] response success');
+    return JSON.parse(jsonText) as PlantIdentificationResult;
+
+  } catch (error: any) {
+    console.error("[Identify] error", error);
+    throw error;
+  }
+};
+
 export const processUserTask = async (text: string, attachment?: { base64: string, mimeType: string }): Promise<AITaskResponse | null> => {
   try {
     const apiKey = getApiKey();

@@ -1,14 +1,22 @@
 import React, { useState, useRef } from 'react';
-import { Camera, Upload, X, Leaf } from 'lucide-react';
+import { Camera, Upload, X, Leaf, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { identifyPlant, PlantIdentificationResult } from '../services/geminiService';
 
 const PlantIdentification: React.FC = () => {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<PlantIdentificationResult | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       console.log('Imagem selecionada:', file.name, file.type, file.size);
+      setSelectedFile(file);
+      setError(null);
+      setResult(null);
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
@@ -20,14 +28,34 @@ const PlantIdentification: React.FC = () => {
   const handleRemoveImage = () => {
     console.log('Imagem removida');
     setImagePreview(null);
+    setSelectedFile(null);
+    setError(null);
+    setResult(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const handleIdentify = () => {
+  const handleIdentify = async () => {
+    if (!selectedFile || !imagePreview) return;
+    
     console.log('Botão Identificar clicado. Imagem pronta para envio.');
-    // Lógica futura do Gemini aqui
+    setIsLoading(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      // Extract base64 data (remove the data:image/jpeg;base64, part)
+      const base64Data = imagePreview.split(',')[1];
+      const mimeType = selectedFile.type;
+
+      const identificationResult = await identifyPlant(base64Data, mimeType);
+      setResult(identificationResult);
+    } catch (err: any) {
+      setError('Não foi possível identificar a planta. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -87,16 +115,60 @@ const PlantIdentification: React.FC = () => {
 
           <button
             onClick={handleIdentify}
-            disabled={!imagePreview}
+            disabled={!imagePreview || isLoading}
             className={`w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all ${
-              imagePreview 
+              imagePreview && !isLoading
                 ? 'bg-farm-600 text-white hover:bg-farm-700 shadow-md hover:shadow-lg' 
                 : 'bg-stone-200 text-stone-400 cursor-not-allowed'
             }`}
           >
-            <Upload size={20} />
-            Identificar Planta
+            {isLoading ? (
+              <>
+                <Loader2 size={20} className="animate-spin" />
+                Analisando...
+              </>
+            ) : (
+              <>
+                <Upload size={20} />
+                Identificar Planta
+              </>
+            )}
           </button>
+
+          {error && (
+            <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex items-start gap-3 text-red-700">
+              <AlertCircle size={20} className="shrink-0 mt-0.5" />
+              <p className="text-sm">{error}</p>
+            </div>
+          )}
+
+          {result && (
+            <div className="bg-farm-50 border border-farm-100 rounded-xl p-5 space-y-4">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 size={24} className="text-farm-600 shrink-0" />
+                <div>
+                  <h3 className="font-bold text-stone-800 text-lg leading-tight">{result.plantName}</h3>
+                  <p className="text-sm text-farm-700 font-medium mt-1">Saúde: {result.healthStatus}</p>
+                </div>
+              </div>
+              
+              {result.possibleProblems && result.possibleProblems.length > 0 && (
+                <div className="pt-3 border-t border-farm-200/50">
+                  <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Possíveis Problemas</p>
+                  <ul className="list-disc list-inside text-sm text-stone-700 space-y-1">
+                    {result.possibleProblems.map((problem, idx) => (
+                      <li key={idx}>{problem}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="pt-3 border-t border-farm-200/50">
+                <p className="text-xs font-bold text-stone-500 uppercase tracking-wider mb-2">Recomendação</p>
+                <p className="text-sm text-stone-700 leading-relaxed">{result.recommendation}</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
